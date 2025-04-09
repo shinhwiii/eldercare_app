@@ -1,53 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'sign_up_screen.dart';
-import 'home_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SignUpScreenState extends State<SignUpScreen> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
-  Future<void> login() async {
+  Future<void> signUp() async {
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
       if (!context.mounted) return;
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('회원가입이 완료되었습니다.')),
       );
+
+      Navigator.pop(context); // 로그인 화면으로 돌아가기
     } on FirebaseAuthException catch (e) {
       String message;
-
       switch (e.code) {
+        case 'email-already-in-use':
+          message = '이미 등록된 이메일이에요.';
+          break;
         case 'invalid-email':
           message = '이메일 형식이 잘못됐어요.';
           break;
-        default:
-          message = '이메일 또는 비밀번호가 잘못 되었습니다.\n'
-              '이메일과 비밀번호를 정확히 입력해 주세요.';
+        case 'weak-password':
+          message = '비밀번호는 최소 6자 이상이어야 해요.';
           break;
+        default:
+          message = '회원가입 실패: ${e.message}';
       }
-
-      if (!context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
     } catch (e) {
-      if (!context.mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('알 수 없는 오류가 발생했어요.')),
       );
@@ -55,9 +53,16 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('로그인')),
+      appBar: AppBar(title: const Text('회원가입')),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -73,16 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: login,
-              child: const Text('로그인'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SignUpScreen()),
-                );
-              },
+              onPressed: signUp,
               child: const Text('회원가입'),
             ),
           ],
