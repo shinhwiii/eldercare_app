@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  cloud_firestore: ^4.13.3
 
   # Firebase Core & Auth (버전 명확히 고정)
   firebase_core: 2.25.4
