@@ -12,6 +12,7 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
+  String _role = 'user'; // 기본 선택: 사용자
 
   Future<void> signUp() async {
     try {
@@ -20,14 +21,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
         password: passwordController.text.trim(),
       );
 
-      // ✅ 사용자 전용 Firestore 문서 생성
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .set({
+      final docRef = FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid);
+
+      // Firestore에 기본 정보 및 역할 저장
+      await docRef.set({
         'email': emailController.text.trim(),
         'createdAt': Timestamp.now(),
+        'role': _role,
       });
+
+      // 역할이 사용자(user)일 때만 healthData 서브컬렉션 생성
+      if (_role == 'user') {
+        await docRef.collection('healthData').doc('init').set({
+          'heartRate': 0,
+          'steps': 0,
+          'location': '0,0',
+          'timestamp': Timestamp.now(),
+        });
+      }
 
       if (!context.mounted) return;
 
@@ -86,6 +97,43 @@ class _SignUpScreenState extends State<SignUpScreen> {
               decoration: const InputDecoration(labelText: '비밀번호'),
               obscureText: true,
             ),
+            const SizedBox(height: 20),
+
+            // ✅ 역할 선택
+            const Text('가입 유형 선택', style: TextStyle(fontWeight: FontWeight.bold)),
+            Row(
+              children: [
+                Expanded(
+                  child: ListTile(
+                    title: const Text('사용자'),
+                    leading: Radio<String>(
+                      value: 'user',
+                      groupValue: _role,
+                      onChanged: (value) {
+                        setState(() {
+                          _role = value!;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ListTile(
+                    title: const Text('보호자'),
+                    leading: Radio<String>(
+                      value: 'guardian',
+                      groupValue: _role,
+                      onChanged: (value) {
+                        setState(() {
+                          _role = value!;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: signUp,
