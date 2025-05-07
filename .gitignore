@@ -37,9 +37,8 @@ ios/Flutter/Generated.xcconfig
 ios/Flutter/flutter_export_environment.sh
 
 # Android Studio build artifacts
-android/app/debug
-android/app/profile
-android/app/release
+android/.gradle/
+android/app/build/
 
 # Symbolication related
 app.*.symbols

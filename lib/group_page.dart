@@ -32,7 +32,7 @@ class _GroupPageState extends State<GroupPage> {
     if (userRole == 'guardian') {
       final groupSnapshot = await FirebaseFirestore.instance
           .collection('groups')
-          .where('createdBy', isEqualTo: user!.uid)
+          .where('ownerId', isEqualTo: user!.uid)
           .orderBy('createdAt', descending: true)
           .get();
 
@@ -53,7 +53,7 @@ class _GroupPageState extends State<GroupPage> {
 
     final newGroupRef = await FirebaseFirestore.instance.collection('groups').add({
       'name': groupName,
-      'createdBy': user!.uid,
+      'ownerId': user!.uid,
       'createdAt': Timestamp.now(),
     });
 
@@ -222,8 +222,9 @@ class _GroupPageState extends State<GroupPage> {
                     );
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  child: const Text('🚪 그룹 나가기',
-                  style: TextStyle(color: Colors.white),
+                  child: const Text(
+                    '🚪 그룹 나가기',
+                    style: TextStyle(color: Colors.white),
                   ),
                 ),
               ],
