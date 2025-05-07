@@ -19,7 +19,7 @@
 ### 1. 저장소 클론
 
 ```bash
-git clone https://github.com/your-username/eldercare_app.git
+git clone https://github.com/shinhwiii/eldercare_app.git
 cd eldercare_app
 ```
 
