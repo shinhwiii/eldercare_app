@@ -36,7 +36,7 @@ flutter pub get
 * `google-services.json` → `android/app/`
 * `GoogleService-Info.plist` → `ios/Runner/`
 
-> 위 파일은 팀장에게 별도 전달받거나 공유된 `.zip` 파일에서 복사하세요.
+> 위 파일은 별도 전달받거나 공유된 `.zip` 파일에서 복사하세요.
 
 ### 4. 앱 실행
 
