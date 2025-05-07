@@ -133,7 +133,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                     final timestamp = data['timestamp'];
                     final timeStr = timestamp != null ? timestamp.toDate().toString() : '알 수 없음';
                     subtitle =
-                    '💓 ${data['heartRate']}bpm, 👟 ${data['steps']}보, 📍 ${data['location']}, 🕒 최근 갱신: $timeStr';
+                    '💓 ${data['heartRate']}bpm 👟 ${data['steps']}보 📍 ${data['location']} 🕒 최근 갱신: $timeStr';
                   }
 
                   return ListTile(

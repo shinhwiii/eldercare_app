@@ -80,9 +80,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final uid = user.uid;
     final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
     final role = doc['role'];
-    final groupId = doc['groupId'];
+    final groupId = doc.data()?['groupId']; // nullable
 
-    if (role != 'user' || groupId == null) return;
+    if (role != 'user') return;
 
     final heartRate = Random().nextInt(80) + 40; // 40~119
     final steps = Random().nextInt(5000) + 1000; // 1000~5999
@@ -101,8 +101,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps');
 
-    // 🔔 비정상 심박수 감지 시 알림 전송
-    if (heartRate > 100 || heartRate < 50) {
+    // 🔔 그룹 가입 상태일 때만 알림 전송
+    if ((heartRate > 100 || heartRate < 50) && groupId != null) {
       final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
       final guardianId = groupDoc['ownerId'];
       final groupName = groupDoc['name'];
