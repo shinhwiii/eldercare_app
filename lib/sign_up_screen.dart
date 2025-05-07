@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // Firestore 추가
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -23,11 +24,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       final docRef = FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid);
 
+      // 🔥 FCM 토큰 받아오기
+      String? token = await FirebaseMessaging.instance.getToken();
+
       // Firestore에 기본 정보 및 역할 저장
       await docRef.set({
         'email': emailController.text.trim(),
         'createdAt': Timestamp.now(),
         'role': _role,
+        'fcmToken': token ?? '', // fcmToken 추가 저장
       });
 
       // 역할이 사용자(user)일 때만 healthData 서브컬렉션 생성

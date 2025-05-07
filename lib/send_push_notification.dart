@@ -8,7 +8,7 @@ Future<void> sendPushNotification({
   required String senderEmail,
   required String groupName,
 }) async {
-  // 1. FCM 전송용 문서 저장
+  // 🔔 푸시 알림 전송용 → Cloud Function에서 이 컬렉션 감지함
   await FirebaseFirestore.instance.collection('notifications').add({
     'fcmToken': fcmToken,
     'title': title,
@@ -19,7 +19,7 @@ Future<void> sendPushNotification({
     'timestamp': FieldValue.serverTimestamp(),
   });
 
-  // 2. 보호자 알림 수신함에도 저장
+  // 📥 수신함 표시용 → 알림 수신함에서 읽는 위치
   await FirebaseFirestore.instance
       .collection('users')
       .doc(guardianId)
@@ -32,5 +32,5 @@ Future<void> sendPushNotification({
     'timestamp': FieldValue.serverTimestamp(),
   });
 
-  print('✅ FCM 알림 요청 및 보호자 알림 수신함 저장 완료');
+  print('✅ 알림 Firestore 및 수신함에 저장 완료 (보호자 ID: $guardianId)');
 }

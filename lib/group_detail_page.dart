@@ -130,9 +130,10 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                   String subtitle = '건강 데이터 없음';
                   if (healthSnapshot.hasData && healthSnapshot.data!.docs.isNotEmpty) {
                     final data = healthSnapshot.data!.docs.first.data() as Map<String, dynamic>;
-                    final time = data['timestamp']?.toDate();
+                    final timestamp = data['timestamp'];
+                    final timeStr = timestamp != null ? timestamp.toDate().toString() : '알 수 없음';
                     subtitle =
-                    '💓 ${data['heartRate']}bpm, 👟 ${data['steps']}보, 📍 ${data['location']}\n🕒 최근 갱신: $time';
+                    '💓 ${data['heartRate']}bpm, 👟 ${data['steps']}보, 📍 ${data['location']}, 🕒 최근 갱신: $timeStr';
                   }
 
                   return ListTile(
