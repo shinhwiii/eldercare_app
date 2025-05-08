@@ -27,8 +27,28 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    requestNotificationPermission();
     setupInteractedMessage();
     saveFcmToken();
+  }
+
+  // class _HomeScreenState extends State<HomeScreen> 아래에 추가
+  Future<void> requestNotificationPermission() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      print('✅ 알림 권한 허용됨');
+    } else if (settings.authorizationStatus == AuthorizationStatus.provisional) {
+      print('⚠️ 알림이 임시 허용됨');
+    } else {
+      print('❌ 알림 권한 거부됨');
+    }
   }
 
   void setupInteractedMessage() async {

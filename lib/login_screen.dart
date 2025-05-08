@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // ✅ 추가
+
 import 'sign_up_screen.dart';
 import 'home_screen.dart';
 
@@ -20,6 +23,19 @@ class _LoginScreenState extends State<LoginScreen> {
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
+
+      final user = FirebaseAuth.instance.currentUser;
+
+      // ✅ 로그인 후 FCM 토큰 저장
+      if (user != null) {
+        final token = await FirebaseMessaging.instance.getToken();
+        if (token != null) {
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+            'fcmToken': token,
+          });
+          print('✅ 로그인 후 FCM 토큰 업데이트 완료: $token');
+        }
+      }
 
       if (!context.mounted) return;
 
