@@ -9,13 +9,17 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cloud_firestore: ^4.13.3
 
-  # Firebase Core & Auth (버전 명확히 고정)
-  firebase_core: 2.25.4
-  firebase_auth: 4.12.0
+  # Firebase
+  cloud_firestore: ^5.6.7
+  firebase_core: ^3.13.0
+  firebase_auth: ^5.5.3
+  firebase_messaging: ^15.2.5
 
-  # 로그인 UI 등 기본 위젯용
+  # 로컬 알림
+  flutter_local_notifications: ^19.1.0
+
+  # UI
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

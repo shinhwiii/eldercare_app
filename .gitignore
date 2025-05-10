@@ -37,9 +37,12 @@ ios/Flutter/Generated.xcconfig
 ios/Flutter/flutter_export_environment.sh
 
 # Android Studio build artifacts
-android/app/debug
-android/app/profile
-android/app/release
+android/.gradle/
+android/app/build/
+android/app/google-services.json
+
+# iOS Firebase 설정 파일
+ios/Runner/GoogleService-Info.plist
 
 # Symbolication related
 app.*.symbols
