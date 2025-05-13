@@ -6,13 +6,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 import 'login_screen.dart';
 import 'group_page.dart';
 import 'alert_inbox_page.dart';
 
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-FlutterLocalNotificationsPlugin();
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
     requestNotificationPermission();
     setupInteractedMessage();
     saveFcmToken();
+    _requestLocationPermission();
   }
 
   // class _HomeScreenState extends State<HomeScreen> 아래에 추가
@@ -52,18 +54,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void setupInteractedMessage() async {
-    const AndroidInitializationSettings initializationSettingsAndroid =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const InitializationSettings initializationSettings =
-    InitializationSettings(android: initializationSettingsAndroid);
-
+    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       RemoteNotification? notification = message.notification;
       AndroidNotification? android = message.notification?.android;
-
       if (notification != null && android != null) {
         flutterLocalNotificationsPlugin.show(
           notification.hashCode,
@@ -93,6 +90,62 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _requestLocationPermission() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('📍 위치 서비스가 꺼져 있어요. 설정에서 켜 주세요.')),
+      );
+      return;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('⚠️ 위치 권한이 거부되었어요.')),
+        );
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('🚫 위치 권한이 영구적으로 거부되었어요. 설정에서 허용해 주세요.')),
+      );
+      return;
+    }
+
+    print('✅ 위치 권한 허용됨');
+  }
+
+  Future<String> getAddressFromCoordinates(Position position) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+        localeIdentifier: "ko",
+      );
+      if (placemarks.isNotEmpty) {
+        final placemark = placemarks.first;
+        return '${placemark.administrativeArea} ${placemark.locality} ${placemark.subLocality}'.trim();
+      } else {
+        return '주소를 찾을 수 없음';
+      }
+    } catch (e) {
+      print('❌ 주소 변환 실패: $e');
+      return '주소 변환 오류';
+    }
+  }
+
+  Future<String> _getCurrentLocation() async {
+    final position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+    return await getAddressFromCoordinates(position);
+  }
+
   Future<void> saveHealthData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -100,33 +153,27 @@ class _HomeScreenState extends State<HomeScreen> {
     final uid = user.uid;
     final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
     final role = doc['role'];
-    final groupId = doc.data()?['groupId']; // nullable
+    final groupId = doc.data()?['groupId'];
 
     if (role != 'user') return;
 
-    final heartRate = Random().nextInt(80) + 40; // 40~119
-    final steps = Random().nextInt(5000) + 1000; // 1000~5999
-    final location = '서울시 강남구 어딘가';
+    final heartRate = Random().nextInt(80) + 40;
+    final steps = Random().nextInt(5000) + 1000;
+    final location = await _getCurrentLocation();
 
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('healthData')
-        .add({
+    await FirebaseFirestore.instance.collection('users').doc(uid).collection('healthData').add({
       'heartRate': heartRate,
       'steps': steps,
       'location': location,
       'timestamp': Timestamp.now(),
     });
 
-    print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps');
+    print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps, Location $location');
 
-    // 🔔 그룹 가입 상태일 때만 알림 전송
     if ((heartRate > 100 || heartRate < 50) && groupId != null) {
       final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
       final guardianId = groupDoc['ownerId'];
       final groupName = groupDoc['name'];
-
       final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
       final fcmToken = guardianDoc['fcmToken'];
 
@@ -232,10 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   title: Text('그룹 ID: $groupId'),
                                   trailing: ElevatedButton(
                                     onPressed: () async {
-                                      await FirebaseFirestore.instance
-                                          .collection('users')
-                                          .doc(user!.uid)
-                                          .update({
+                                      await FirebaseFirestore.instance.collection('users').doc(user!.uid).update({
                                         'groupId': groupId,
                                         'groupInvites': FieldValue.arrayRemove([groupId]),
                                       });
@@ -253,17 +297,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           },
                         ),
-
                         const SizedBox(height: 24),
-
                         StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(user!.uid)
-                              .collection('healthData')
-                              .orderBy('timestamp', descending: true)
-                              .limit(1)
-                              .snapshots(),
+                          stream: FirebaseFirestore.instance.collection('users').doc(user!.uid).collection('healthData').orderBy('timestamp', descending: true).limit(1).snapshots(),
                           builder: (context, snapshot) {
                             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                               return Column(
@@ -296,7 +332,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           },
                         ),
-
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: () {
