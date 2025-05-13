@@ -19,6 +19,10 @@ dependencies:
   # 로컬 알림
   flutter_local_notifications: ^19.1.0
 
+  # 위치 추적
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1   # ✅ 추가: 좌표를 주소로 변환하는 기능
+
   # UI
   cupertino_icons: ^1.0.8
 
