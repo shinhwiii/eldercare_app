@@ -8,10 +8,12 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:health/health.dart';
 
 import 'login_screen.dart';
 import 'group_page.dart';
 import 'alert_inbox_page.dart';
+
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -32,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setupInteractedMessage();
     saveFcmToken();
     _requestLocationPermission();
+    requestHealthPermissions();
   }
 
   // class _HomeScreenState extends State<HomeScreen> 아래에 추가
@@ -52,6 +55,20 @@ class _HomeScreenState extends State<HomeScreen> {
       print('❌ 알림 권한 거부됨');
     }
   }
+  Future<void> requestHealthPermissions() async {
+  final health = Health();
+  final types = [HealthDataType.HEART_RATE, HealthDataType.STEPS];
+  final permissions = types.map((e) => HealthDataAccess.READ).toList();
+
+  // 권한 요청 실행 (최초 1회 필수)
+  bool granted = await health.requestAuthorization(types, permissions: permissions);
+  
+  if (granted) {
+    print('✅ 권한 허용됨');
+  } else {
+    print('❌ 권한 거부됨');
+  }
+}
 
   void setupInteractedMessage() async {
     const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -145,7 +162,105 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     return await getAddressFromCoordinates(position);
   }
+  // 기존 saveHealthData 함수를 아래 코드로 교체
+Future<void> saveRealHData() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
 
+  final uid = user.uid;
+  final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+  final role = doc['role'];
+  final groupId = doc.data()?['groupId'];
+
+  if (role != 'user') return;
+
+  // Health Connect 인스턴스 생성
+  final health = Health();
+  final types = [HealthDataType.HEART_RATE, HealthDataType.STEPS];
+  final permissions = types.map((e) => HealthDataAccess.READ).toList();
+
+  try {
+    // 권한 요청
+    bool granted = await health.requestAuthorization(types, permissions: permissions);
+    if (!granted) {
+      print('❌ 건강정보 권한 거부됨');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('건강 정보 접근 권한이 필요합니다.')),
+      );
+      return;
+    }
+
+    // 최근 1시간 데이터 가져오기
+    final now = DateTime.now();
+    final lastHour = now.subtract(const Duration(hours: 1));
+    final healthData = await health.getHealthDataFromTypes(
+      startTime: lastHour,
+      endTime: now,
+      types: types,
+    );
+
+    // 최신 데이터 추출
+    int heartRate = 0;
+    int steps = 0;
+    DateTime? latestHeartRateTime;
+    DateTime? latestStepsTime;
+
+    for (var data in healthData) {
+      if (data.type == HealthDataType.HEART_RATE && data.value is NumericHealthValue) {
+        final value = (data.value as NumericHealthValue).numericValue.toInt();
+        if (latestHeartRateTime == null || data.dateTo.isAfter(latestHeartRateTime)) {
+          heartRate = value;
+          latestHeartRateTime = data.dateTo;
+        }
+      } else if (data.type == HealthDataType.STEPS && data.value is NumericHealthValue) {
+        final value = (data.value as NumericHealthValue).numericValue.toInt();
+        if (latestStepsTime == null || data.dateTo.isAfter(latestStepsTime)) {
+          steps = value;
+          latestStepsTime = data.dateTo;
+        }
+      }
+    }
+
+    // 위치 정보 가져오기
+    final location = await _getCurrentLocation();
+
+    // Firestore에 저장
+    await FirebaseFirestore.instance.collection('users').doc(uid).collection('healthData').add({
+      'heartRate': heartRate,
+      'steps': steps,
+      'location': location,
+      'timestamp': Timestamp.now(),
+    });
+
+    print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps, Location $location');
+
+    // 심박수 이상 시 알림
+    if ((heartRate > 100 || heartRate < 50) && groupId != null) {
+      final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
+      final guardianId = groupDoc['ownerId'];
+      final groupName = groupDoc['name'];
+      final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
+      final fcmToken = guardianDoc['fcmToken'];
+
+      await sendPushNotification(
+        fcmToken: fcmToken,
+        title: '🚨 [$groupName] ${user.email}님 심박수 경고',
+        body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
+        guardianId: guardianId,
+        senderEmail: user.email!,
+        groupName: groupName,
+      );
+    }
+
+  } catch (e) {
+    print('⚠️ 건강 데이터 저장 오류: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('건강 데이터 가져오기 실패!')),
+    );
+  }
+}
+
+  
   Future<void> saveHealthData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -310,6 +425,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                     onPressed: saveHealthData,
                                     child: const Text('건강 데이터 저장하기'),
                                   ),
+                                  const SizedBox(height: 8),
+                                  ElevatedButton(
+                                    onPressed: saveRealHData,
+                                    child: const Text('실시간 건강 데이터 저장하기'),
+                                  ),
                                 ],
                               );
                             }
@@ -327,6 +447,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ElevatedButton(
                                   onPressed: saveHealthData,
                                   child: const Text('건강 데이터 저장하기'),
+                                ),
+                                const SizedBox(height: 8),
+                                ElevatedButton(
+                                  onPressed: saveRealHData,
+                                  child: const Text('실시간 건강 데이터 저장하기'),
                                 ),
                               ],
                             );

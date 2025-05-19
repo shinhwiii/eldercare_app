@@ -24,7 +24,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.eldercare_app"
-        minSdk = 23
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -43,4 +43,7 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation ("androidx.health.connect:connect-client:1.1.0-alpha11")
+    
+    
 }
