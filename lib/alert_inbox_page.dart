@@ -65,12 +65,11 @@ class AlertInboxPage extends StatelessWidget {
               final title = alert['title'] ?? '제목 없음';
               final body = alert['body'] ?? '내용 없음';
               final senderEmail = alert['senderEmail'] ?? '알 수 없음';
-              final groupName = alert['groupName'] ?? '알 수 없음';
               final timestamp = alert['timestamp']?.toDate();
 
               return ListTile(
                 leading: const Icon(Icons.notifications),
-                title: Text('[$groupName] $title'),
+                title: Text(title),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

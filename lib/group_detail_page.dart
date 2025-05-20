@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'user_health_analysis_page.dart';
 
 class GroupDetailPage extends StatefulWidget {
   final String groupId;
@@ -127,23 +128,53 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                     .limit(1)
                     .get(),
                 builder: (context, healthSnapshot) {
-                  String subtitle = '건강 데이터 없음';
-                  if (healthSnapshot.hasData && healthSnapshot.data!.docs.isNotEmpty) {
-                    final data = healthSnapshot.data!.docs.first.data() as Map<String, dynamic>;
-                    final timestamp = data['timestamp'];
-                    final timeStr = timestamp != null ? timestamp.toDate().toString() : '알 수 없음';
-                    subtitle =
-                    '💓 ${data['heartRate']}bpm 👟 ${data['steps']}보 📍 ${data['location']} 🕒 최근 갱신: $timeStr';
+                  if (!healthSnapshot.hasData || healthSnapshot.data!.docs.isEmpty) {
+                    return ListTile(
+                      title: Text(email),
+                      subtitle: const Text('건강 데이터 없음'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.person_remove, color: Colors.red),
+                        onPressed: () => removeUserFromGroup(uid),
+                        tooltip: '강퇴하기',
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => UserHealthAnalysisPage(userId: uid),
+                          ),
+                        );
+                      },
+                    );
                   }
+
+                  final data = healthSnapshot.data!.docs.first.data() as Map<String, dynamic>;
+                  final timestamp = data['timestamp'];
+                  final timeStr = timestamp != null ? timestamp.toDate().toString() : '알 수 없음';
 
                   return ListTile(
                     title: Text(email),
-                    subtitle: Text(subtitle),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('💓 ${data['heartRate']}bpm 👟 ${data['steps']}보'),
+                        Text('📍 ${data['location']}'),
+                        Text('🕒 최근 갱신: $timeStr'),
+                      ],
+                    ),
                     trailing: IconButton(
                       icon: const Icon(Icons.person_remove, color: Colors.red),
                       onPressed: () => removeUserFromGroup(uid),
                       tooltip: '강퇴하기',
                     ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => UserHealthAnalysisPage(userId: uid),
+                        ),
+                      );
+                    },
                   );
                 },
               );
