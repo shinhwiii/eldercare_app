@@ -152,13 +152,18 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                   final timestamp = data['timestamp'];
                   final timeStr = timestamp != null ? timestamp.toDate().toString() : '알 수 없음';
 
+                  final location = data['location'];
+                  final locationText = (location is Map && location.containsKey('address'))
+                      ? location['address']
+                      : location.toString();
+
                   return ListTile(
                     title: Text(email),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('💓 ${data['heartRate']}bpm 👟 ${data['steps']}보'),
-                        Text('📍 ${data['location']}'),
+                        Text('📍 $locationText'),
                         Text('🕒 최근 갱신: $timeStr'),
                       ],
                     ),

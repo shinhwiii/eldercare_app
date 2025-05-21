@@ -21,15 +21,20 @@ dependencies:
 
   # 위치 추적
   geolocator: ^10.1.0
-  geocoding: ^2.1.1   # ✅ 추가: 좌표를 주소로 변환하는 기능
+  geocoding: ^2.1.1
 
   # UI
   cupertino_icons: ^1.0.8
+
   # Health
   health: ^12.2.0
   android_intent_plus: ^5.3.0
+
   # 그래프
   fl_chart: ^0.66.2
+
+  # ✅ 지도 표시 (구글 지도)
+  google_maps_flutter: ^2.5.0
 
 dev_dependencies:
   flutter_test:

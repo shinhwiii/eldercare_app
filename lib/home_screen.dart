@@ -204,124 +204,128 @@ void openHealthConnectSettings() {
 
   Future<String> _getCurrentLocation() async {
     final position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
+      desiredAccuracy: LocationAccuracy.bestForNavigation,
     );
     return await getAddressFromCoordinates(position);
   }
   // 기존 saveHealthData 함수를 아래 코드로 교체
 
 
-Future<void> saveRealHData() async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
+  Future<void> saveRealHData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-  final uid = user.uid;
-  final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-  final role = doc['role'];
-  final groupId = doc.data()?['groupId'];
+    final uid = user.uid;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final role = doc['role'];
+    final groupId = doc.data()?['groupId'];
 
-  if (role != 'user') return;
+    if (role != 'user') return;
 
-  final health = Health();
-  final types = [HealthDataType.HEART_RATE, HealthDataType.STEPS];
+    final health = Health();
+    final types = [HealthDataType.HEART_RATE, HealthDataType.STEPS];
 
-  try {
-    // 최근 1시간 데이터 가져오기
-    final now = DateTime.now();
-    final startTime = now.subtract(const Duration(hours: 1));
+    try {
+      final now = DateTime.now();
+      final startTime = now.subtract(const Duration(hours: 1));
 
-    final healthData = await health.getHealthDataFromTypes(
-      startTime: startTime,
-      endTime: now,
-      types: types,
-    );
-
-    if (healthData.isEmpty) {
-      print('⚠️ 최근 1시간 건강 데이터 없음');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('최근 1시간 동안 기록된 건강 데이터가 없습니다')),
+      final healthData = await health.getHealthDataFromTypes(
+        startTime: startTime,
+        endTime: now,
+        types: types,
       );
-      return;
-    }
 
-    int? heartRate;
-    int steps = 0;
-    for (var data in healthData) {
-      if (data.value is! NumericHealthValue) continue;
-
-      final value = (data.value as NumericHealthValue).numericValue.toInt();
-      switch (data.type) {
-        case HealthDataType.HEART_RATE:
-          heartRate = value; // 최신 심박수만 저장
-          break;
-        case HealthDataType.STEPS:
-          steps += value; // 걸음수 누적 합계
-          break;
-        default:
-          break;
+      if (healthData.isEmpty) {
+        print('⚠️ 최근 1시간 건강 데이터 없음');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('최근 1시간 동안 기록된 건강 데이터가 없습니다')),
+        );
+        return;
       }
-    }
 
-    if (heartRate == null) {
-      print('⚠️ 심박수 데이터 누락');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('심박수 데이터를 가져오지 못했습니다')),
-      );
-      return;
-    }
+      int? heartRate;
+      int steps = 0;
+      for (var data in healthData) {
+        if (data.value is! NumericHealthValue) continue;
 
-    // 위치 정보 오류 처리
-    final location = await _getCurrentLocation().catchError((e) {
-      print('📍 위치 정보 오류: $e');
-      return '위치 정보 없음';
-    });
+        final value = (data.value as NumericHealthValue).numericValue.toInt();
+        switch (data.type) {
+          case HealthDataType.HEART_RATE:
+            heartRate = value;
+            break;
+          case HealthDataType.STEPS:
+            steps += value;
+            break;
+          default:
+            break;
+        }
+      }
 
-    // Firestore에 저장
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('healthData')
-        .add({
-          'heartRate': heartRate,
-          'steps': steps,
-          'location': location,
-          'timestamp': Timestamp.now(),
-        });
+      if (heartRate == null) {
+        print('⚠️ 심박수 데이터 누락');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('심박수 데이터를 가져오지 못했습니다')),
+        );
+        return;
+      }
 
-    print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps');
+      // 📍 위치 정보 가져오기
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.bestForNavigation);
+      String address = await getAddressFromCoordinates(position).catchError((e) {
+        print('❌ 주소 변환 실패: $e');
+        return '주소 변환 오류';
+      });
 
-    // 심박수 이상 시 알림 (분할하지 않고 이 안에서 처리)
-    if ((heartRate > 100 || heartRate < 50) && groupId != null) {
-      final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
-      final guardianId = groupDoc['ownerId'];
-      final groupName = groupDoc['name'];
-      final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
-      final fcmToken = guardianDoc['fcmToken'];
+      Map<String, dynamic> location = {
+        'address': address,
+        'lat': position.latitude,
+        'lng': position.longitude,
+      };
 
-      await sendPushNotification(
-        fcmToken: fcmToken,
-        title: '🚨 [$groupName] ${user.email}님 심박수 경고',
-        body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
-        guardianId: guardianId,
-        senderEmail: user.email!,
-        groupName: groupName,
-      );
-    }
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('healthData')
+          .add({
+        'heartRate': heartRate,
+        'steps': steps,
+        'location': location,
+        'timestamp': Timestamp.now(),
+      });
 
-  } catch (e, stackTrace) {
-    print('''
+      print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps');
+
+      if ((heartRate > 100 || heartRate < 50) && groupId != null) {
+        final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
+        final guardianId = groupDoc['ownerId'];
+        final groupName = groupDoc['name'];
+        final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
+        final fcmToken = guardianDoc['fcmToken'];
+
+        await sendPushNotification(
+          fcmToken: fcmToken,
+          title: '🚨 [$groupName] ${user.email}님 심박수 경고',
+          body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
+          guardianId: guardianId,
+          senderEmail: user.email!,
+          groupName: groupName,
+        );
+      }
+
+    } catch (e, stackTrace) {
+      print('''
 ⚠️ 치명적 오류 발생
 Error: $e
 Stack Trace: $stackTrace
 ''');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('건강 데이터 처리 중 오류가 발생했습니다')),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('건강 데이터 처리 중 오류가 발생했습니다')),
+      );
+    }
   }
-}
 
 
-  
+
   Future<void> saveHealthData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -335,31 +339,55 @@ Stack Trace: $stackTrace
 
     final heartRate = Random().nextInt(80) + 40;
     final steps = Random().nextInt(5000) + 1000;
-    final location = await _getCurrentLocation();
 
-    await FirebaseFirestore.instance.collection('users').doc(uid).collection('healthData').add({
-      'heartRate': heartRate,
-      'steps': steps,
-      'location': location,
-      'timestamp': Timestamp.now(),
-    });
+    try {
+      // 📍 현재 위치 + 주소 + 좌표 추출
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.bestForNavigation);
+      final address = await getAddressFromCoordinates(position).catchError((e) {
+        print('❌ 주소 변환 실패: $e');
+        return '주소 변환 오류';
+      });
 
-    print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps, Location $location');
+      final location = {
+        'address': address,
+        'lat': position.latitude,
+        'lng': position.longitude,
+      };
 
-    if ((heartRate > 100 || heartRate < 50) && groupId != null) {
-      final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
-      final guardianId = groupDoc['ownerId'];
-      final groupName = groupDoc['name'];
-      final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
-      final fcmToken = guardianDoc['fcmToken'];
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('healthData')
+          .add({
+        'heartRate': heartRate,
+        'steps': steps,
+        'location': location,
+        'timestamp': Timestamp.now(),
+      });
 
-      await sendPushNotification(
-        fcmToken: fcmToken,
-        title: '🚨 [$groupName] ${user.email}님 심박수 경고',
-        body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
-        guardianId: guardianId,
-        senderEmail: user.email!,
-        groupName: groupName,
+      print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps, Location $location');
+
+      if ((heartRate > 100 || heartRate < 50) && groupId != null) {
+        final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
+        final guardianId = groupDoc['ownerId'];
+        final groupName = groupDoc['name'];
+        final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
+        final fcmToken = guardianDoc['fcmToken'];
+
+        await sendPushNotification(
+          fcmToken: fcmToken,
+          title: '🚨 [$groupName] ${user.email}님 심박수 경고',
+          body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
+          guardianId: guardianId,
+          senderEmail: user.email!,
+          groupName: groupName,
+        );
+      }
+
+    } catch (e) {
+      print('❌ saveHealthData 실패: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('건강 데이터 저장 중 오류가 발생했습니다')),
       );
     }
   }
@@ -502,7 +530,10 @@ Stack Trace: $stackTrace
                               children: [
                                 Text('🧡 심박수: ${data['heartRate']} bpm'),
                                 Text('👟 걸음수: ${data['steps']} 보'),
-                                Text('📍 위치: ${data['location']}'),
+                                Text(
+                                    '📍 위치: ${(data['location'] is Map && data['location'].containsKey('address'))
+                                        ? data['location']['address']
+                                        : data['location'].toString()}'),
                                 Text('🕒 시간: ${data['timestamp'].toDate()}'),
                                 const SizedBox(height: 16),
                                 ElevatedButton(

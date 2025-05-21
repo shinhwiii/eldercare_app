@@ -2,16 +2,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class UserHealthGraphPage extends StatefulWidget {
+class UserHealthSummaryPage extends StatefulWidget {
   final String userId;
 
-  const UserHealthGraphPage({super.key, required this.userId});
+  const UserHealthSummaryPage({super.key, required this.userId});
 
   @override
-  State<UserHealthGraphPage> createState() => _UserHealthGraphPageState();
+  State<UserHealthSummaryPage> createState() => _UserHealthSummaryPage();
 }
 
-class _UserHealthGraphPageState extends State<UserHealthGraphPage> {
+class _UserHealthSummaryPage extends State<UserHealthSummaryPage> {
   String selectedPeriod = '일별';
   List<String> periods = ['일별', '주별', '월별'];
   late Future<List<Map<String, dynamic>>> healthData;
@@ -59,19 +59,26 @@ class _UserHealthGraphPageState extends State<UserHealthGraphPage> {
       grouped.putIfAbsent(key, () => []).add(item);
     }
 
-    // 📊 평균 계산
+    // 📊 평균 + 누적 계산
     final List<Map<String, dynamic>> groupedData = [];
     for (var entry in grouped.entries) {
       final date = DateFormat('yyyy-MM-dd').parse(entry.key);
       final list = entry.value;
 
       final avgHeart = list.map((e) => (e['heartRate'] as num)).reduce((a, b) => a + b) / list.length;
-      final sumSteps = list.map((e) => (e['steps'] as num)).reduce((a, b) => a + b);
+
+      // ✅ 하루 내 기록에서 steps: 마지막 - 처음 값으로 계산
+      final sortedByTime = List.from(list)
+        ..sort((a, b) =>
+            (a['timestamp'] as Timestamp).compareTo(b['timestamp'] as Timestamp));
+      final firstSteps = (sortedByTime.first['steps'] ?? 0) as num;
+      final lastSteps = (sortedByTime.last['steps'] ?? 0) as num;
+      final dailySteps = (lastSteps - firstSteps).clamp(0, double.infinity);
 
       groupedData.add({
         'timestamp': date,
         'heartRate': avgHeart,
-        'steps': sumSteps,
+        'steps': dailySteps,
       });
     }
 
