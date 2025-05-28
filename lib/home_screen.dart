@@ -269,6 +269,13 @@ Future<void> saveRealHData() async {
       );
       return;
     }
+    if (steps == 0) {
+      print('⚠️ 걸음수 데이터 누락');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('걸음수 데이터를 가져오지 못했습니다')),
+      );
+      return;
+    }
 
     // 위치 정보 오류 처리
     final location = await _getCurrentLocation().catchError((e) {
