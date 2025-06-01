@@ -263,13 +263,13 @@ void openHealthConnectSettings() {
       );
       return;
     }
-    if (steps == 0) {
-      print('⚠️ 걸음수 데이터 누락');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('걸음수 데이터를 가져오지 못했습니다')),
-      );
-      return;
-    }
+    // if (steps == 0) {
+    //   print('⚠️ 걸음수 데이터 누락');
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     const SnackBar(content: Text('걸음수 데이터를 가져오지 못했습니다')),
+    //   );
+    //   return;
+    // }
 
     // ✅ 걸음수는 총합으로 정확하게 가져오기 (오늘 하루 기준)
     final steps = await health.getTotalStepsInInterval(
