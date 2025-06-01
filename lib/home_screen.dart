@@ -212,117 +212,127 @@ void openHealthConnectSettings() {
 
 
   Future<void> saveRealHData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
 
-    final uid = user.uid;
-    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    final role = doc['role'];
-    final groupId = doc.data()?['groupId'];
+  final uid = user.uid;
+  final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+  final role = doc['role'];
+  final groupId = doc.data()?['groupId'];
 
-    if (role != 'user') return;
+  if (role != 'user') return;
 
-    final health = Health();
-    final types = [HealthDataType.HEART_RATE, HealthDataType.STEPS];
+  final health = Health();
+  final now = DateTime.now();
+  final startTime = now.subtract(const Duration(hours: 1)); // 심박수 조회용
+  final todayStart = DateTime(now.year, now.month, now.day); // 걸음수 누적 조회용
 
-    try {
-      final now = DateTime.now();
-      final startTime = now.subtract(const Duration(hours: 1));
+  try {
+    // ✅ 권한 요청
+    // final hasPermission = await health.requestAuthorization([
+    //   HealthDataType.HEART_RATE,
+    //   HealthDataType.STEPS,
+    // ]);
+    // if (!hasPermission) {
+    //   print('❌ 건강 데이터 권한 거부됨');
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     const SnackBar(content: Text('건강 정보 권한이 필요합니다')),
+    //   );
+    //   return;
+    // }
 
-      final healthData = await health.getHealthDataFromTypes(
-        startTime: startTime,
-        endTime: now,
-        types: types,
+    // ✅ 심박수 데이터 가져오기 (최근 1시간)
+    final heartData = await health.getHealthDataFromTypes(
+      startTime: startTime,
+      endTime: now,
+      types: [HealthDataType.HEART_RATE],
+    );
+
+    int? heartRate;
+    for (var data in heartData) {
+      if (data.value is NumericHealthValue &&
+          data.type == HealthDataType.HEART_RATE) {
+        heartRate = (data.value as NumericHealthValue).numericValue.toInt();
+      }
+    }
+
+    if (heartRate == null) {
+      print('⚠️ 심박수 데이터 없음');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('심박수 데이터를 가져올 수 없습니다')),
       );
+      return;
+    }
 
-      if (healthData.isEmpty) {
-        print('⚠️ 최근 1시간 건강 데이터 없음');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('최근 1시간 동안 기록된 건강 데이터가 없습니다')),
-        );
-        return;
-      }
+    // ✅ 걸음수는 총합으로 정확하게 가져오기 (오늘 하루 기준)
+    final steps = await health.getTotalStepsInInterval(
+      todayStart,
+      now,
+    );
 
-      int? heartRate;
-      int steps = 0;
-      for (var data in healthData) {
-        if (data.value is! NumericHealthValue) continue;
+    // ✅ 위치 정보
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.bestForNavigation,
+    );
+    String address = await getAddressFromCoordinates(position).catchError((e) {
+      print('❌ 주소 변환 실패: $e');
+      return '주소 변환 오류';
+    });
 
-        final value = (data.value as NumericHealthValue).numericValue.toInt();
-        switch (data.type) {
-          case HealthDataType.HEART_RATE:
-            heartRate = value;
-            break;
-          case HealthDataType.STEPS:
-            steps += value;
-            break;
-          default:
-            break;
-        }
-      }
+    Map<String, dynamic> location = {
+      'address': address,
+      'lat': position.latitude,
+      'lng': position.longitude,
+    };
 
-      if (heartRate == null) {
-        print('⚠️ 심박수 데이터 누락');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('심박수 데이터를 가져오지 못했습니다')),
-        );
-        return;
-      }
+    // ✅ Firestore 저장
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('healthData')
+        .add({
+      'heartRate': heartRate,
+      'steps': steps,
+      'location': location,
+      'timestamp': Timestamp.now(),
+    });
 
-      // 📍 위치 정보 가져오기
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.bestForNavigation);
-      String address = await getAddressFromCoordinates(position).catchError((e) {
-        print('❌ 주소 변환 실패: $e');
-        return '주소 변환 오류';
-      });
+    print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps');
 
-      Map<String, dynamic> location = {
-        'address': address,
-        'lat': position.latitude,
-        'lng': position.longitude,
-      };
-
-      await FirebaseFirestore.instance
+    // ✅ 심박수 경고 푸시 알림
+    if ((heartRate > 100 || heartRate < 50) && groupId != null) {
+      final groupDoc = await FirebaseFirestore.instance
+          .collection('groups')
+          .doc(groupId)
+          .get();
+      final guardianId = groupDoc['ownerId'];
+      final groupName = groupDoc['name'];
+      final guardianDoc = await FirebaseFirestore.instance
           .collection('users')
-          .doc(uid)
-          .collection('healthData')
-          .add({
-        'heartRate': heartRate,
-        'steps': steps,
-        'location': location,
-        'timestamp': Timestamp.now(),
-      });
+          .doc(guardianId)
+          .get();
+      final fcmToken = guardianDoc['fcmToken'];
 
-      print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps');
-
-      if ((heartRate > 100 || heartRate < 50) && groupId != null) {
-        final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
-        final guardianId = groupDoc['ownerId'];
-        final groupName = groupDoc['name'];
-        final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
-        final fcmToken = guardianDoc['fcmToken'];
-
-        await sendPushNotification(
-          fcmToken: fcmToken,
-          title: '🚨 [$groupName] ${user.email}님 심박수 경고',
-          body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
-          guardianId: guardianId,
-          senderEmail: user.email!,
-          groupName: groupName,
-        );
-      }
-
-    } catch (e, stackTrace) {
-      print('''
+      await sendPushNotification(
+        fcmToken: fcmToken,
+        title: '🚨 [$groupName] ${user.email}님 심박수 경고',
+        body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
+        guardianId: guardianId,
+        senderEmail: user.email!,
+        groupName: groupName,
+      );
+    }
+  } catch (e, stackTrace) {
+    print('''
 ⚠️ 치명적 오류 발생
 Error: $e
 Stack Trace: $stackTrace
 ''');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('건강 데이터 처리 중 오류가 발생했습니다')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('건강 데이터 처리 중 오류가 발생했습니다')),
+    );
   }
+}
 
 
 
