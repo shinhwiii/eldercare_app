@@ -1,4 +1,4 @@
-// import 'dart:math';
+import 'dart:math';
 
 import 'package:eldercare_app/send_push_notification.dart';
 import 'package:flutter/material.dart';
@@ -346,71 +346,78 @@ Stack Trace: $stackTrace
   }
 }
 
-  // Future<void> saveHealthData() async {
-  //   final user = FirebaseAuth.instance.currentUser;
-  //   if (user == null) return;
-  //
-  //   final uid = user.uid;
-  //   final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-  //   final role = doc['role'];
-  //   final groupId = doc.data()?['groupId'];
-  //
-  //   if (role != 'user') return;
-  //
-  //   final heartRate = Random().nextInt(80) + 40;
-  //   final steps = Random().nextInt(5000) + 1000;
-  //
-  //   try {
-  //     // 📍 현재 위치 + 주소 + 좌표 추출
-  //     final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.bestForNavigation);
-  //     final address = await getAddressFromCoordinates(position).catchError((e) {
-  //       print('❌ 주소 변환 실패: $e');
-  //       return '주소 변환 오류';
-  //     });
-  //
-  //     final location = {
-  //       'address': address,
-  //       'lat': position.latitude,
-  //       'lng': position.longitude,
-  //     };
-  //
-  //     await FirebaseFirestore.instance
-  //         .collection('users')
-  //         .doc(uid)
-  //         .collection('healthData')
-  //         .add({
-  //       'heartRate': heartRate,
-  //       'steps': steps,
-  //       'location': location,
-  //       'timestamp': Timestamp.now(),
-  //     });
-  //
-  //     print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps, Location $location');
-  //
-  //     if ((heartRate > 100 || heartRate < 50) && groupId != null) {
-  //       final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
-  //       final guardianId = groupDoc['ownerId'];
-  //       final groupName = groupDoc['name'];
-  //       final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
-  //       final fcmToken = guardianDoc['fcmToken'];
-  //
-  //       await sendPushNotification(
-  //         fcmToken: fcmToken,
-  //         title: '🚨 [$groupName] ${user.email}님 심박수 경고',
-  //         body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
-  //         guardianId: guardianId,
-  //         senderEmail: user.email!,
-  //         groupName: groupName,
-  //       );
-  //     }
-  //
-  //   } catch (e) {
-  //     print('❌ saveHealthData 실패: $e');
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(content: Text('건강 데이터 저장 중 오류가 발생했습니다')),
-  //     );
-  //   }
-  // }
+  Future<void> saveAbnormalHData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final uid = user.uid;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final role = doc['role'];
+    final groupId = doc.data()?['groupId'];
+
+    if (role != 'user') return;
+
+    // 테스트용 비정상 심박수 생성
+    final random = Random();
+    int heartRate;
+    if (random.nextBool()) {
+      heartRate = random.nextInt(40) + 30; // 30~69 (저심박)
+    } else {
+      heartRate = random.nextInt(40) + 110; // 110~149 (고심박)
+    }
+
+    final steps = random.nextInt(2000) + 1000; // 예시 걸음수
+
+    try {
+      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.bestForNavigation);
+      final address = await getAddressFromCoordinates(position).catchError((e) {
+        print('❌ 주소 변환 실패: $e');
+        return '주소 변환 오류';
+      });
+
+      final location = {
+        'address': address,
+        'lat': position.latitude,
+        'lng': position.longitude,
+      };
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('healthData')
+          .add({
+        'heartRate': heartRate,
+        'steps': steps,
+        'location': location,
+        'timestamp': Timestamp.now(),
+      });
+
+      print('✅ 테스트용 비정상 심박수 저장 완료: HR $heartRate, Steps $steps');
+
+      if ((heartRate > 100 || heartRate < 50) && groupId != null) {
+        final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
+        final guardianId = groupDoc['ownerId'];
+        final groupName = groupDoc['name'];
+        final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
+        final fcmToken = guardianDoc['fcmToken'];
+
+        await sendPushNotification(
+          fcmToken: fcmToken,
+          title: '🚨 [$groupName] ${user.email}님 심박수 경고',
+          body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
+          guardianId: guardianId,
+          senderEmail: user.email!,
+          groupName: groupName,
+        );
+      }
+
+    } catch (e) {
+      print('❌ saveAbnormalHData 실패: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('건강 데이터 저장 중 오류가 발생했습니다')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -529,15 +536,15 @@ Stack Trace: $stackTrace
                               return Column(
                                 children: [
                                   const Text('아직 건강 데이터가 없습니다.'),
-                                  // const SizedBox(height: 16),
-                                  // ElevatedButton(
-                                  //   onPressed: saveHealthData,
-                                  //   child: const Text('건강 데이터 저장하기'),
-                                  // ),
                                   const SizedBox(height: 8),
                                   ElevatedButton(
                                     onPressed: saveRealHData,
                                     child: const Text('실시간 건강 데이터 저장하기'),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton(
+                                    onPressed: saveAbnormalHData,
+                                    child: const Text('비정상 건강 데이터 저장하기(시연용)'),
                                   ),
                                 ],
                               );
@@ -555,15 +562,15 @@ Stack Trace: $stackTrace
                                         ? data['location']['address']
                                         : data['location'].toString()}'),
                                 Text('🕒 시간: ${data['timestamp'].toDate()}'),
-                                // const SizedBox(height: 16),
-                                // ElevatedButton(
-                                //   onPressed: saveHealthData,
-                                //   child: const Text('건강 데이터 저장하기'),
-                                // ),
                                 const SizedBox(height: 8),
                                 ElevatedButton(
                                   onPressed: saveRealHData,
                                   child: const Text('실시간 건강 데이터 저장하기'),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: saveAbnormalHData,
+                                  child: const Text('비정상 건강 데이터 저장하기(시연용)'),
                                 ),
                               ],
                             );
