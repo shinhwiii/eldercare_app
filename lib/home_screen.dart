@@ -341,8 +341,6 @@ Stack Trace: $stackTrace
   }
 }
 
-
-
   Future<void> saveHealthData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;

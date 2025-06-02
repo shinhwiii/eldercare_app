@@ -59,7 +59,7 @@ class _UserHealthSummaryPage extends State<UserHealthSummaryPage> {
       grouped.putIfAbsent(key, () => []).add(item);
     }
 
-    // 📊 평균 + 누적 계산
+    // 📊 평균 + 걸음수 추출
     final List<Map<String, dynamic>> groupedData = [];
     for (var entry in grouped.entries) {
       final date = DateFormat('yyyy-MM-dd').parse(entry.key);
@@ -67,13 +67,10 @@ class _UserHealthSummaryPage extends State<UserHealthSummaryPage> {
 
       final avgHeart = list.map((e) => (e['heartRate'] as num)).reduce((a, b) => a + b) / list.length;
 
-      // ✅ 하루 내 기록에서 steps: 마지막 - 처음 값으로 계산
       final sortedByTime = List.from(list)
         ..sort((a, b) =>
             (a['timestamp'] as Timestamp).compareTo(b['timestamp'] as Timestamp));
-      final firstSteps = (sortedByTime.first['steps'] ?? 0) as num;
-      final lastSteps = (sortedByTime.last['steps'] ?? 0) as num;
-      final dailySteps = (lastSteps - firstSteps).clamp(0, double.infinity);
+      final dailySteps = (sortedByTime.last['steps'] ?? 0) as num;
 
       groupedData.add({
         'timestamp': date,
@@ -82,8 +79,54 @@ class _UserHealthSummaryPage extends State<UserHealthSummaryPage> {
       });
     }
 
-    groupedData.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime)); // 최신순 정렬
-    return groupedData;
+    groupedData.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+
+    if (selectedPeriod == '일별') {
+      return groupedData;
+    } else {
+      return aggregateByPeriod(groupedData, selectedPeriod);
+    }
+  }
+
+  List<Map<String, dynamic>> aggregateByPeriod(
+      List<Map<String, dynamic>> data, String period) {
+    final Map<String, List<Map<String, dynamic>>> aggregated = {};
+
+    for (var item in data) {
+      final date = item['timestamp'] as DateTime;
+
+      String key;
+      if (period == '주별') {
+        final monday = date.subtract(Duration(days: date.weekday - 1));
+        key = DateFormat('yyyy-MM-dd').format(monday); // 주 시작일
+      } else if (period == '월별') {
+        key = DateFormat('yyyy-MM').format(date); // 연-월
+      } else {
+        key = DateFormat('yyyy-MM-dd').format(date);
+      }
+
+      aggregated.putIfAbsent(key, () => []).add(item);
+    }
+
+    final List<Map<String, dynamic>> result = [];
+
+    aggregated.forEach((key, items) {
+      final DateTime timestamp = (period == '월별')
+          ? DateFormat('yyyy-MM').parse(key)
+          : DateFormat('yyyy-MM-dd').parse(key);
+
+      final avgHeart = items.map((e) => (e['heartRate'] as num)).reduce((a, b) => a + b) / items.length;
+      final avgSteps = items.map((e) => (e['steps'] as num)).reduce((a, b) => a + b) / items.length;
+
+      result.add({
+        'timestamp': timestamp,
+        'heartRate': avgHeart,
+        'steps': avgSteps.round(), // 소수점 제거
+      });
+    });
+
+    result.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+    return result;
   }
 
   @override
@@ -141,7 +184,11 @@ class _UserHealthSummaryPage extends State<UserHealthSummaryPage> {
                             Text('📅 $day', style: const TextStyle(fontWeight: FontWeight.bold)),
                             const SizedBox(height: 6),
                             Text('💓 평균 심박수: $heart bpm'),
-                            Text('👟 총 걸음수: $steps 보'),
+                            Text(
+                              selectedPeriod == '일별'
+                                  ? '👟 총 걸음수: $steps 보'
+                                  : '👟 평균 걸음수: $steps 보',
+                            ),
                           ],
                         ),
                       ),
