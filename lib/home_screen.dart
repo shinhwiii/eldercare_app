@@ -223,9 +223,10 @@ void openHealthConnectSettings() {
   if (role != 'user') return;
 
   final health = Health();
-  final now = DateTime.now();
+  final now = DateTime.now(); 
+  final nowKTC = now.toUtc().add(const Duration(hours: 9)); // 한국 시간으로 변환
   final startTime = now.subtract(const Duration(hours: 1)); // 심박수 조회용
-  final todayStart = DateTime(now.year, now.month, now.day); // 걸음수 누적 조회용
+  final todayStart = DateTime(nowKTC.year, nowKTC.month, nowKTC.day); // 걸음수 누적 조회용
 
   try {
     // ✅ 권한 요청
@@ -272,10 +273,14 @@ void openHealthConnectSettings() {
     // }
 
     // ✅ 걸음수는 총합으로 정확하게 가져오기 (오늘 하루 기준)
+    // final startUTC = todayStart.toUtc();
+    // final endUTC = now.toUtc();    
     final steps = await health.getTotalStepsInInterval(
       todayStart,
-      now,
+      nowKTC,
     );
+    print(todayStart);
+    print(nowKTC);
 
     // ✅ 위치 정보
     Position position = await Geolocator.getCurrentPosition(
