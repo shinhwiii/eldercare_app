@@ -12,10 +12,18 @@
     <!-- 활동 감지 및 센서 -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <!-- 백그라운드 동작  -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <application
         android:label="eldercare_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- 백그라운드 서비스 -->
+        <service
+            android:name="dev.fluttercommunity.plus.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="location|dataSync"
+            android:enabled="true"
+            android:exported="false"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

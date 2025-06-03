@@ -11,12 +11,18 @@ import 'package:geocoding/geocoding.dart';
 import 'package:health/health.dart';
 import 'package:android_intent_plus/android_intent.dart';
 
+import 'package:flutter_background_service_android/flutter_background_service_android.dart';
+import 'dart:async';
+
+import 'save_health_data.dart';
 import 'login_screen.dart';
 import 'group_page.dart';
 import 'alert_inbox_page.dart';
 
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,6 +42,8 @@ class _HomeScreenState extends State<HomeScreen> {
     saveFcmToken();
     _requestLocationPermission();
     requestHealthPermissions();
+    // background service 설정
+    
   }
 
   // class _HomeScreenState extends State<HomeScreen> 아래에 추가
@@ -211,140 +219,140 @@ void openHealthConnectSettings() {
   // 기존 saveHealthData 함수를 아래 코드로 교체
 
 
-  Future<void> saveRealHData() async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
+//   Future<void> saveRealHData() async {
+//   final user = FirebaseAuth.instance.currentUser;
+//   if (user == null) return;
 
-  final uid = user.uid;
-  final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-  final role = doc['role'];
-  final groupId = doc.data()?['groupId'];
+//   final uid = user.uid;
+//   final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+//   final role = doc['role'];
+//   final groupId = doc.data()?['groupId'];
 
-  if (role != 'user') return;
+//   if (role != 'user') return;
 
-  final health = Health();
-  final now = DateTime.now(); 
-  final nowKTC = now.toUtc().add(const Duration(hours: 9)); // 한국 시간으로 변환
-  final startTime = now.subtract(const Duration(hours: 1)); // 심박수 조회용
-  final todayStart = DateTime(nowKTC.year, nowKTC.month, nowKTC.day); // 걸음수 누적 조회용
+//   final health = Health();
+//   final now = DateTime.now(); 
+//   final nowKTC = now.toUtc().add(const Duration(hours: 9)); // 한국 시간으로 변환
+//   final startTime = now.subtract(const Duration(hours: 1)); // 심박수 조회용
+//   final todayStart = DateTime(nowKTC.year, nowKTC.month, nowKTC.day); // 걸음수 누적 조회용
 
-  try {
-    // ✅ 권한 요청
-    // final hasPermission = await health.requestAuthorization([
-    //   HealthDataType.HEART_RATE,
-    //   HealthDataType.STEPS,
-    // ]);
-    // if (!hasPermission) {
-    //   print('❌ 건강 데이터 권한 거부됨');
-    //   ScaffoldMessenger.of(context).showSnackBar(
-    //     const SnackBar(content: Text('건강 정보 권한이 필요합니다')),
-    //   );
-    //   return;
-    // }
+//   try {
+//     // ✅ 권한 요청
+//     // final hasPermission = await health.requestAuthorization([
+//     //   HealthDataType.HEART_RATE,
+//     //   HealthDataType.STEPS,
+//     // ]);
+//     // if (!hasPermission) {
+//     //   print('❌ 건강 데이터 권한 거부됨');
+//     //   ScaffoldMessenger.of(context).showSnackBar(
+//     //     const SnackBar(content: Text('건강 정보 권한이 필요합니다')),
+//     //   );
+//     //   return;
+//     // }
 
-    // ✅ 심박수 데이터 가져오기 (최근 1시간)
-    final heartData = await health.getHealthDataFromTypes(
-      startTime: startTime,
-      endTime: now,
-      types: [HealthDataType.HEART_RATE],
-    );
+//     // ✅ 심박수 데이터 가져오기 (최근 1시간)
+//     final heartData = await health.getHealthDataFromTypes(
+//       startTime: startTime,
+//       endTime: now,
+//       types: [HealthDataType.HEART_RATE],
+//     );
 
-    int? heartRate;
-    for (var data in heartData) {
-      if (data.value is NumericHealthValue &&
-          data.type == HealthDataType.HEART_RATE) {
-        heartRate = (data.value as NumericHealthValue).numericValue.toInt();
-      }
-    }
+//     int? heartRate;
+//     for (var data in heartData) {
+//       if (data.value is NumericHealthValue &&
+//           data.type == HealthDataType.HEART_RATE) {
+//         heartRate = (data.value as NumericHealthValue).numericValue.toInt();
+//       }
+//     }
 
-    if (heartRate == null) {
-      print('⚠️ 심박수 데이터 없음');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('심박수 데이터를 가져올 수 없습니다')),
-      );
-      return;
-    }
-    // if (steps == 0) {
-    //   print('⚠️ 걸음수 데이터 누락');
-    //   ScaffoldMessenger.of(context).showSnackBar(
-    //     const SnackBar(content: Text('걸음수 데이터를 가져오지 못했습니다')),
-    //   );
-    //   return;
-    // }
+//     if (heartRate == null) {
+//       print('⚠️ 심박수 데이터 없음');
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         const SnackBar(content: Text('심박수 데이터를 가져올 수 없습니다')),
+//       );
+//       return;
+//     }
+//     // if (steps == 0) {
+//     //   print('⚠️ 걸음수 데이터 누락');
+//     //   ScaffoldMessenger.of(context).showSnackBar(
+//     //     const SnackBar(content: Text('걸음수 데이터를 가져오지 못했습니다')),
+//     //   );
+//     //   return;
+//     // }
 
-    // ✅ 걸음수는 총합으로 정확하게 가져오기 (오늘 하루 기준)
-    // final startUTC = todayStart.toUtc();
-    // final endUTC = now.toUtc();    
-    final steps = await health.getTotalStepsInInterval(
-      todayStart,
-      nowKTC,
-    );
-    print(todayStart);
-    print(nowKTC);
+//     // ✅ 걸음수는 총합으로 정확하게 가져오기 (오늘 하루 기준)
+//     // final startUTC = todayStart.toUtc();
+//     // final endUTC = now.toUtc();    
+//     final steps = await health.getTotalStepsInInterval(
+//       todayStart,
+//       nowKTC,
+//     );
+//     print(todayStart);
+//     print(nowKTC);
 
-    // ✅ 위치 정보
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.bestForNavigation,
-    );
-    String address = await getAddressFromCoordinates(position).catchError((e) {
-      print('❌ 주소 변환 실패: $e');
-      return '주소 변환 오류';
-    });
+//     // ✅ 위치 정보
+//     Position position = await Geolocator.getCurrentPosition(
+//       desiredAccuracy: LocationAccuracy.bestForNavigation,
+//     );
+//     String address = await getAddressFromCoordinates(position).catchError((e) {
+//       print('❌ 주소 변환 실패: $e');
+//       return '주소 변환 오류';
+//     });
 
-    Map<String, dynamic> location = {
-      'address': address,
-      'lat': position.latitude,
-      'lng': position.longitude,
-    };
+//     Map<String, dynamic> location = {
+//       'address': address,
+//       'lat': position.latitude,
+//       'lng': position.longitude,
+//     };
 
-    // ✅ Firestore 저장
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('healthData')
-        .add({
-      'heartRate': heartRate,
-      'steps': steps,
-      'location': location,
-      'timestamp': Timestamp.now(),
-    });
+//     // ✅ Firestore 저장
+//     await FirebaseFirestore.instance
+//         .collection('users')
+//         .doc(uid)
+//         .collection('healthData')
+//         .add({
+//       'heartRate': heartRate,
+//       'steps': steps,
+//       'location': location,
+//       'timestamp': Timestamp.now(),
+//     });
 
-    print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps');
+//     print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps');
 
-    // ✅ 심박수 경고 푸시 알림
-    if ((heartRate > 100 || heartRate < 50) && groupId != null) {
-      final groupDoc = await FirebaseFirestore.instance
-          .collection('groups')
-          .doc(groupId)
-          .get();
-      final guardianId = groupDoc['ownerId'];
-      final groupName = groupDoc['name'];
-      final guardianDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(guardianId)
-          .get();
-      final fcmToken = guardianDoc['fcmToken'];
+//     // ✅ 심박수 경고 푸시 알림
+//     if ((heartRate > 100 || heartRate < 50) && groupId != null) {
+//       final groupDoc = await FirebaseFirestore.instance
+//           .collection('groups')
+//           .doc(groupId)
+//           .get();
+//       final guardianId = groupDoc['ownerId'];
+//       final groupName = groupDoc['name'];
+//       final guardianDoc = await FirebaseFirestore.instance
+//           .collection('users')
+//           .doc(guardianId)
+//           .get();
+//       final fcmToken = guardianDoc['fcmToken'];
 
-      await sendPushNotification(
-        fcmToken: fcmToken,
-        title: '🚨 [$groupName] ${user.email}님 심박수 경고',
-        body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
-        guardianId: guardianId,
-        senderEmail: user.email!,
-        groupName: groupName,
-      );
-    }
-  } catch (e, stackTrace) {
-    print('''
-⚠️ 치명적 오류 발생
-Error: $e
-Stack Trace: $stackTrace
-''');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('건강 데이터 처리 중 오류가 발생했습니다')),
-    );
-  }
-}
+//       await sendPushNotification(
+//         fcmToken: fcmToken,
+//         title: '🚨 [$groupName] ${user.email}님 심박수 경고',
+//         body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
+//         guardianId: guardianId,
+//         senderEmail: user.email!,
+//         groupName: groupName,
+//       );
+//     }
+//   } catch (e, stackTrace) {
+//     print('''
+// ⚠️ 치명적 오류 발생
+// Error: $e
+// Stack Trace: $stackTrace
+// ''');
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       const SnackBar(content: Text('건강 데이터 처리 중 오류가 발생했습니다')),
+//     );
+//   }
+// }
 
   Future<void> saveAbnormalHData() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -538,7 +546,10 @@ Stack Trace: $stackTrace
                                   const Text('아직 건강 데이터가 없습니다.'),
                                   const SizedBox(height: 8),
                                   ElevatedButton(
-                                    onPressed: saveRealHData,
+                                    onPressed: () => saveRealHData(
+                                      context: context,
+                                      getAddressFromCoordinates: getAddressFromCoordinates,
+                                    ),
                                     child: const Text('실시간 건강 데이터 저장하기'),
                                   ),
                                   const SizedBox(height: 16),
@@ -564,7 +575,10 @@ Stack Trace: $stackTrace
                                 Text('🕒 시간: ${data['timestamp'].toDate()}'),
                                 const SizedBox(height: 8),
                                 ElevatedButton(
-                                  onPressed: saveRealHData,
+                                  onPressed: () => saveRealHData(
+                                    context: context,
+                                    getAddressFromCoordinates: getAddressFromCoordinates,
+                                  ),
                                   child: const Text('실시간 건강 데이터 저장하기'),
                                 ),
                                 const SizedBox(height: 16),

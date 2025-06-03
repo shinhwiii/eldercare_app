@@ -3,6 +3,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Background service 관련 패키지
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_background_service_android/flutter_background_service_android.dart';
+import 'dart:async';
+
 import 'login_screen.dart';
 import 'home_screen.dart';
 
@@ -11,6 +16,24 @@ void main() async {
   await Firebase.initializeApp(); // Firebase 초기화
   runApp(const MyApp());
 }
+// Background service 설정
+// 🔸 백그라운드 핸들러 (이 함수는 context 등 사용 X)
+// @pragma('vm:entry-point')
+// void onStart(ServiceInstance service) async {
+//   DartPluginRegistrant.ensureInitialized();
+
+//   service.on('setAsForeground').listen((event) {
+//     service.setAsForegroundService();
+//   });
+
+//   service.on('setAsBackground').listen((event) {
+//     service.setAsBackgroundService();
+//   });
+
+//   Timer.periodic(const Duration(minutes: 15), (timer) async {
+//     await saveRealHData(); // 내부에서 user == null 체크 포함됨
+//   });
+// }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
