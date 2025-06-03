@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:eldercare_app/send_push_notification.dart';
 import 'package:flutter/material.dart';
@@ -12,8 +13,11 @@ import 'package:health/health.dart';
 import 'package:android_intent_plus/android_intent.dart';
 
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'dart:async';
 
+import 'background_task.dart';
+import 'main.dart';
 import 'save_health_data.dart';
 import 'login_screen.dart';
 import 'group_page.dart';
@@ -43,9 +47,52 @@ class _HomeScreenState extends State<HomeScreen> {
     _requestLocationPermission();
     requestHealthPermissions();
     // background service 설정
+    startBackgroundService();
+    // 백그라운드 서비스 확인인
+    _startServiceIfNeeded();
     
   }
+  // 백그라운드 서비스가 시작되어 있는지 확인
+   Future<void> _startServiceIfNeeded() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // 백그라운드 서비스가 이미 실행 중인지 확인
+      final isRunning = await FlutterBackgroundService().isRunning();
+      if (!isRunning) {
+        await startBackgroundService(); // 백그라운드 서비스 시작
+      }
+    }
+  }
+//백그라운드 작업업
 
+Future<void> startBackgroundService() async {
+  final service = FlutterBackgroundService();
+
+  await service.configure(
+    androidConfiguration: AndroidConfiguration(
+      onStart: onStart,
+      isForegroundMode: true,
+      autoStart: false,
+      notificationChannelId: 'eldercare_channel_id',
+      initialNotificationTitle: 'Eldercare App',
+      initialNotificationContent: '건강 데이터를 백그라운드에서 수집 중...',
+    ),
+    iosConfiguration: IosConfiguration(
+      onForeground: onStart,
+      onBackground: backgroundHandler, // iOS에서는 제한적이므로 주의
+    ),
+  );
+
+  await service.startService();
+}
+
+Future<bool> backgroundHandler(ServiceInstance service) async {
+  DartPluginRegistrant.ensureInitialized();
+  // 백그라운드 시 처리할 로직 (예: Firebase 초기화 등)
+  return true;
+}
+
+  
   // class _HomeScreenState extends State<HomeScreen> 아래에 추가
   Future<void> requestNotificationPermission() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -442,6 +489,7 @@ void openHealthConnectSettings() {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
+              stopBackgroundService(); // 백그라운드 서비스 중지
               await FirebaseAuth.instance.signOut();
               if (!context.mounted) return;
               Navigator.pushReplacement(
