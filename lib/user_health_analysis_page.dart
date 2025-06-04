@@ -99,7 +99,7 @@ class _UserHealthAnalysisPageState extends State<UserHealthAnalysisPage> {
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('💓 ${heartRate} bpm 👟 ${data['steps']} 보'),
+                          Text('💓 $heartRate bpm 👟 ${data['steps']} 보'),
                           Text(
                             '📍 ${(data['location'] is Map && data['location'].containsKey('address'))
                                 ? data['location']['address']

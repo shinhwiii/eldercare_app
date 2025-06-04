@@ -332,6 +332,7 @@ void openHealthConnectSettings() {
         guardianId: guardianId,
         senderEmail: user.email!,
         groupName: groupName,
+        abnormalUserId: uid,
       );
     }
   } catch (e, stackTrace) {
@@ -361,9 +362,9 @@ Stack Trace: $stackTrace
     final random = Random();
     int heartRate;
     if (random.nextBool()) {
-      heartRate = random.nextInt(40) + 30; // 30~69 (저심박)
+      heartRate = random.nextInt(40) + 10; // 30~69 (저심박)
     } else {
-      heartRate = random.nextInt(40) + 110; // 110~149 (고심박)
+      heartRate = random.nextInt(40) + 100; // 100~149 (고심박)
     }
 
     final steps = random.nextInt(2000) + 1000; // 예시 걸음수
@@ -408,6 +409,7 @@ Stack Trace: $stackTrace
           guardianId: guardianId,
           senderEmail: user.email!,
           groupName: groupName,
+          abnormalUserId: uid,
         );
       }
 

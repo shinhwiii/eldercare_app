@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'user_health_analysis_page.dart'; // ✅ 사용자 분석 페이지 import
+
 class AlertInboxPage extends StatelessWidget {
   const AlertInboxPage({super.key});
 
@@ -66,6 +68,7 @@ class AlertInboxPage extends StatelessWidget {
               final body = alert['body'] ?? '내용 없음';
               final senderEmail = alert['senderEmail'] ?? '알 수 없음';
               final timestamp = alert['timestamp']?.toDate();
+              final abnormalUserId = alert['userId']; // ✅ 알림 속 사용자 ID 가져오기
 
               return ListTile(
                 leading: const Icon(Icons.notifications),
@@ -79,6 +82,21 @@ class AlertInboxPage extends StatelessWidget {
                       Text('🕒 ${timestamp.toString()}', style: const TextStyle(fontSize: 12)),
                   ],
                 ),
+                onTap: abnormalUserId != null
+                    ? () {
+                  print('✅ 알림 클릭됨, userId: $abnormalUserId');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => UserHealthAnalysisPage(userId: abnormalUserId),
+                    ),
+                  );
+                }
+                    : () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('❗ 이 알림에는 사용자 ID 정보가 없습니다.')),
+                  );
+                },
               );
             },
           );
