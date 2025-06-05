@@ -1,9 +1,11 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"> <!-- ✅ tools 네임스페이스 추가 -->
 
     <!-- ✅ 위치 권한 추가 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-     <!-- ✅ Health Connect 권한 (정식 네임스페이스 사용) -->
+
+    <!-- ✅ Health Connect 권한 -->
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.WRITE_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_STEPS" />
@@ -12,21 +14,27 @@
     <!-- 활동 감지 및 센서 -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.BODY_SENSORS" />
-    <!-- 백그라운드 동작  -->
+
+    <!-- 백그라운드 동작 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+
     <application
         android:label="eldercare_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <!-- 백그라운드 서비스 -->
+
+        <!-- ✅ tools:replace로 병합 충돌 해결 -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="location|dataSync|health"
             android:enabled="true"
-            />
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="health|location|dataSync"
+            tools:replace="android:exported" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -36,25 +44,29 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
+
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme"
-                />
+                android:resource="@style/NormalTheme" />
+
             <!-- 권한 Rationale 핸들링 (Android 13 이하) -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
+
             <!-- Android 14+ 권한 설정 인텐트 -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
             </intent-filter>
         </activity>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyCfGvuQAtmI8GvOAdFcfQhhX_qWiQnJEgA" />

@@ -1,42 +1,82 @@
 import 'dart:async';
 import 'dart:ui';
+
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-import 'save_health_data.dart'; // 
+import 'save_health_data.dart';
+
+@pragma('vm:entry-point')
 Future<void> onStart(ServiceInstance service) async {
-  DartPluginRegistrant.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await Firebase.initializeApp();
+    debugPrint("✅ Firebase 초기화 성공");
+  } catch (e) {
+    debugPrint("❌ Firebase 초기화 실패: $e");
+    // Firebase 없으면 서비스 제대로 못 하니까 종료
+    service.stopSelf();
+    return;
+  }
+
+  debugPrint("🔵 onStart 진입");
 
   if (service is AndroidServiceInstance) {
-    // ✅ foreground service로 설정 (시작 시 반드시 필요함)
-    await service.setAsForegroundService();
+    debugPrint("🟢 AndroidServiceInstance 확인");
 
-    // 선택적으로 foreground/background 전환 리스너
+    try {
+      await service.setForegroundNotificationInfo(
+        title: "Eldercare 실행 중",
+        content: "시연용 건강 데이터를 저장 중입니다",
+      );
+      debugPrint("🟢 ForegroundNotification 설정 완료");
+
+      await service.setAsForegroundService();
+      debugPrint("🟢 setAsForegroundService 호출됨");
+    } catch (e) {
+      debugPrint("❌ Foreground 설정 실패: $e");
+      service.stopSelf();
+      return;
+    }
+
     service.on('setAsForeground').listen((event) {
+      debugPrint("🟡 수동 Foreground 설정 요청 감지");
       service.setAsForegroundService();
     });
 
     service.on('setAsBackground').listen((event) {
+      debugPrint("🟡 수동 Background 설정 요청 감지");
       service.setAsBackgroundService();
+    });
+
+    service.on('stopService').listen((event) {
+      debugPrint("🔴 stopService 이벤트 감지됨. 서비스 종료 시도");
+      service.stopSelf();
     });
   }
 
-  // 🕒 주기적 백그라운드 작업 실행
   Timer.periodic(const Duration(seconds: 10), (timer) async {
-    // foreground 상태 확인 (필요 시 작업 생략)
-    if (service is AndroidServiceInstance && !(await service.isForegroundService())) {
+    debugPrint("⏱️ 주기 타이머 시작됨");
+
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user != null) {
+    debugPrint("✅ [백그라운드] 시연용 데이터 저장 중...");
+    await saveAbnormalHDataBackground();
+    } else {
+      debugPrint("⛔ [백그라운드] 로그인 안됨");
       return;
     }
-
-    await saveRealHDataBackground(); // 실질적 작업 수행
   });
 }
 
 Future<void> stopBackgroundService() async {
   final service = FlutterBackgroundService();
-  final isRunning = await service.isRunning();
-  if (isRunning) {
+  if (await service.isRunning()) {
     service.invoke("stopService");
     debugPrint("✅ 백그라운드 서비스 종료됨");
   }

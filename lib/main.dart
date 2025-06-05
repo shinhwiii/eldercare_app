@@ -1,71 +1,72 @@
 import 'dart:ui';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Background service 관련 패키지
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_android/flutter_background_service_android.dart';
-import 'dart:async';
+import 'package:permission_handler/permission_handler.dart'; // ✅ 알림 권한 요청용
 
 import 'save_health_data.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
-
-
-// // Background service 설정
-// Future<void> initializeService() async {
-//   final service = FlutterBackgroundService();
-
-//   await service.configure(
-//     androidConfiguration: AndroidConfiguration(
-//       onStart: onStart, // 서비스 시작 시 실행할 함수
-//       isForegroundMode: true,
-//       autoStart: true, // 앱 실행 시 자동 시작
-//       notificationChannelId: 'my_channel',
-//       initialNotificationTitle: 'Eldercare Service',
-//       initialNotificationContent: '데이터 모니터링 중...',
-//     ),
-//     iosConfiguration: IosConfiguration(
-//       onForeground: onStart,
-//       onBackground: backgroundHandler,
-//     ),
-//   );
-
-//   await service.startService();
-// }
-
-// Future<bool> backgroundHandler(ServiceInstance service) async {
-//   DartPluginRegistrant.ensureInitialized();
-//   // 백그라운드 시 처리할 로직 (예: Firebase 초기화 등)
-//   return true;
-// }
-
-
-// @pragma('vm:entry-point')
-// void onStart(ServiceInstance service) async {
-//   DartPluginRegistrant.ensureInitialized();
-
-//   Timer.periodic(const Duration(seconds: 10), (timer) async {
-//     final user = FirebaseAuth.instance.currentUser;
-//     if (user != null) {
-//       await saveRealHDataBackground();
-//     } else {
-//       timer.cancel();
-//     }
-//   });
-// }
-
+import 'background_task.dart'; // ✅ 따로 만든 onStart 사용
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(); // Firebase 초기화
-  // await initializeService(); // Background service 초기화
+  await Firebase.initializeApp();            // ✅ Firebase 초기화
+  await requestNotificationPermission();     // ✅ 알림 권한 요청
   runApp(const MyApp());
 }
 
+/// ✅ Android 13+ 알림 권한 요청
+Future<void> requestNotificationPermission() async {
+  await [
+    Permission.notification,
+    Permission.activityRecognition,
+    Permission.sensors,
+  ].request();
+}
+
+/// ✅ Background service 초기화 함수
+Future<void> initializeService() async {
+  debugPrint("rr");
+  final service = FlutterBackgroundService();
+
+  // ✅ 이미 실행 중이면 재시작하지 않음
+  final isRunning = await service.isRunning();
+  if (isRunning) {
+    debugPrint("🟡 백그라운드 서비스가 이미 실행 중입니다. 초기화 건너뜀.");
+    return;
+  }
+
+  await service.configure(
+    androidConfiguration: AndroidConfiguration(
+      onStart: onStart, // ✅ background_task.dart에서 정의
+      isForegroundMode: true,
+      autoStart: true,
+      notificationChannelId: 'eldercare_channel_id',
+      initialNotificationTitle: 'Eldercare 서비스 실행 중',
+      initialNotificationContent: '건강 데이터를 주기적으로 저장하고 있어요',
+      foregroundServiceNotificationId: 888,
+    ),
+    iosConfiguration: IosConfiguration(
+      onForeground: onStart,
+      onBackground: backgroundHandler,
+    ),
+  );
+
+  await service.startService();
+}
+
+/// iOS 백그라운드 핸들러
+Future<bool> backgroundHandler(ServiceInstance service) async {
+  DartPluginRegistrant.ensureInitialized();
+  return true;
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -77,26 +78,21 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        useMaterial3: true, // 최신 스타일 사용 (선택)
+        useMaterial3: true,
       ),
-
-      // ✅ 자동 로그인 상태 감지 및 분기
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          // 🔄 Firebase 초기 연결 중일 때 로딩 표시
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             );
           }
 
-          // ✅ 로그인된 상태 → 홈 화면으로 이동
           if (snapshot.hasData) {
             return const HomeScreen();
           }
 
-          // ❌ 로그인 안 된 상태 → 로그인 화면으로 이동
           return const LoginScreen();
         },
       ),

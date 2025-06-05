@@ -1,3 +1,5 @@
+// home_screen.dart (수정본)
+
 import 'dart:math';
 import 'dart:ui';
 
@@ -11,10 +13,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:health/health.dart';
 import 'package:android_intent_plus/android_intent.dart';
-
-import 'package:flutter_background_service_android/flutter_background_service_android.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'dart:async';
 
 import 'background_task.dart';
 import 'main.dart';
@@ -23,10 +22,7 @@ import 'login_screen.dart';
 import 'group_page.dart';
 import 'alert_inbox_page.dart';
 
-
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-
-
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -46,63 +42,35 @@ class _HomeScreenState extends State<HomeScreen> {
     saveFcmToken();
     _requestLocationPermission();
     requestHealthPermissions();
-    // background service 설정
-    startBackgroundService();
-    // 백그라운드 서비스 확인인
     _startServiceIfNeeded();
-    
   }
-  // 백그라운드 서비스가 시작되어 있는지 확인
-   Future<void> _startServiceIfNeeded() async {
+
+  Future<void> _startServiceIfNeeded() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      // 백그라운드 서비스가 이미 실행 중인지 확인
-      final isRunning = await FlutterBackgroundService().isRunning();
-      if (!isRunning) {
-        await startBackgroundService(); // 백그라운드 서비스 시작
-      }
+    if (user == null) return;
+
+    final uid = user.uid;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final role = doc['role'];
+
+    if (role != 'user') return; // 👈 보호자는 실행 안 함
+
+    final service = FlutterBackgroundService();
+    final isRunning = await service.isRunning();
+    if (!isRunning) {
+      await initializeService(); // 👈 background_task.dart에 정의된 configure & start 포함 함수
+      print("✅ 사용자로 로그인됨. 백그라운드 서비스 시작됨");
     }
   }
-//백그라운드 작업업
 
-Future<void> startBackgroundService() async {
-  final service = FlutterBackgroundService();
 
-  await service.configure(
-    androidConfiguration: AndroidConfiguration(
-      onStart: onStart,
-      isForegroundMode: true,
-      autoStart: false,
-      notificationChannelId: 'eldercare_channel_id',
-      initialNotificationTitle: 'Eldercare App',
-      initialNotificationContent: '건강 데이터를 백그라운드에서 수집 중...',
-    ),
-    iosConfiguration: IosConfiguration(
-      onForeground: onStart,
-      onBackground: backgroundHandler, // iOS에서는 제한적이므로 주의
-    ),
-  );
-
-  await service.startService();
-}
-
-Future<bool> backgroundHandler(ServiceInstance service) async {
-  DartPluginRegistrant.ensureInitialized();
-  // 백그라운드 시 처리할 로직 (예: Firebase 초기화 등)
-  return true;
-}
-
-  
-  // class _HomeScreenState extends State<HomeScreen> 아래에 추가
   Future<void> requestNotificationPermission() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
-
     NotificationSettings settings = await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
-
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
       print('✅ 알림 권한 허용됨');
     } else if (settings.authorizationStatus == AuthorizationStatus.provisional) {
@@ -112,66 +80,60 @@ Future<bool> backgroundHandler(ServiceInstance service) async {
     }
   }
 
-Future<void> requestHealthPermissions() async {
-  final health = Health();
-  final types = [HealthDataType.HEART_RATE, HealthDataType.STEPS];
-  final permissions = types.map((e) => HealthDataAccess.READ).toList();
+  Future<void> requestHealthPermissions() async {
+    final health = Health();
+    final types = [HealthDataType.HEART_RATE, HealthDataType.STEPS];
+    final permissions = types.map((e) => HealthDataAccess.READ).toList();
 
-  // Health Connect 앱 설치 여부 확인
-  final isAvailable = await health.isHealthConnectAvailable();
-  if (!isAvailable) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Health Connect 앱이 설치되어 있지 않습니다.')),
-    );
-    print('❌ Health Connect 앱이 설치되어 있지 않습니다.');
-    return;
-  }
+    final isAvailable = await health.isHealthConnectAvailable();
+    if (!isAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Health Connect 앱이 설치되어 있지 않습니다.')),
+      );
+      print('❌ Health Connect 앱이 설치되어 있지 않습니다.');
+      return;
+    }
 
-  // 이미 권한이 있는지 확인 (null-safety)
-  bool hasPermissions = (await health.hasPermissions(types, permissions: permissions)) ?? false;
-  if (hasPermissions) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('이미 건강 데이터 권한이 허용되어 있습니다.')),
-    );
-    print('✅ 이미 권한 허용됨');
-    return;
-  }
+    bool hasPermissions = (await health.hasPermissions(types, permissions: permissions)) ?? false;
+    if (hasPermissions) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('이미 건강 데이터 권한이 허용되어 있습니다.')),
+      );
+      print('✅ 이미 권한 허용됨');
+      return;
+    }
 
-  // 권한 요청
-  bool granted = await health.requestAuthorization(types, permissions: permissions);
-
-  if (granted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('✅ 건강 데이터 권한이 허용되었습니다.')),
-    );
-    print('✅ 권한 허용됨');
-  } else {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('❌ 건강 데이터 권한이 거부되었습니다.'),
-        action: SnackBarAction(
-          label: '설정에서 허용',
-          onPressed: () {
-            openHealthConnectSettings();
-          },
+    bool granted = await health.requestAuthorization(types, permissions: permissions);
+    if (granted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ 건강 데이터 권한이 허용되었습니다.')),
+      );
+      print('✅ 권한 허용됨');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('❌ 건강 데이터 권한이 거부되었습니다.'),
+          action: SnackBarAction(
+            label: '설정에서 허용',
+            onPressed: () {
+              openHealthConnectSettings();
+            },
+          ),
         ),
-      ),
-    );
-    print('❌ 권한 거부됨');
+      );
+      print('❌ 권한 거부됨');
+    }
   }
-}
 
-// Health Connect 설정 화면으로 이동하는 함수
-void openHealthConnectSettings() {
-  final intent = AndroidIntent(
-    action: 'android.settings.HEALTH_CONNECT_SETTINGS',
-    package: 'com.google.android.apps.healthdata',
-  );
-  intent.launch();
-}
+  void openHealthConnectSettings() {
+    final intent = AndroidIntent(
+      action: 'android.settings.HEALTH_CONNECT_SETTINGS',
+      package: 'com.google.android.apps.healthdata',
+    );
+    intent.launch();
+  }
 
-
-  void setupInteractedMessage() async {
+  Future<void> setupInteractedMessage() async {
     const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
     const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
@@ -263,143 +225,6 @@ void openHealthConnectSettings() {
     );
     return await getAddressFromCoordinates(position);
   }
-  // 기존 saveHealthData 함수를 아래 코드로 교체
-
-
-//   Future<void> saveRealHData() async {
-//   final user = FirebaseAuth.instance.currentUser;
-//   if (user == null) return;
-
-//   final uid = user.uid;
-//   final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-//   final role = doc['role'];
-//   final groupId = doc.data()?['groupId'];
-
-//   if (role != 'user') return;
-
-//   final health = Health();
-//   final now = DateTime.now(); 
-//   final nowKTC = now.toUtc().add(const Duration(hours: 9)); // 한국 시간으로 변환
-//   final startTime = now.subtract(const Duration(hours: 1)); // 심박수 조회용
-//   final todayStart = DateTime(nowKTC.year, nowKTC.month, nowKTC.day); // 걸음수 누적 조회용
-
-//   try {
-//     // ✅ 권한 요청
-//     // final hasPermission = await health.requestAuthorization([
-//     //   HealthDataType.HEART_RATE,
-//     //   HealthDataType.STEPS,
-//     // ]);
-//     // if (!hasPermission) {
-//     //   print('❌ 건강 데이터 권한 거부됨');
-//     //   ScaffoldMessenger.of(context).showSnackBar(
-//     //     const SnackBar(content: Text('건강 정보 권한이 필요합니다')),
-//     //   );
-//     //   return;
-//     // }
-
-//     // ✅ 심박수 데이터 가져오기 (최근 1시간)
-//     final heartData = await health.getHealthDataFromTypes(
-//       startTime: startTime,
-//       endTime: now,
-//       types: [HealthDataType.HEART_RATE],
-//     );
-
-//     int? heartRate;
-//     for (var data in heartData) {
-//       if (data.value is NumericHealthValue &&
-//           data.type == HealthDataType.HEART_RATE) {
-//         heartRate = (data.value as NumericHealthValue).numericValue.toInt();
-//       }
-//     }
-
-//     if (heartRate == null) {
-//       print('⚠️ 심박수 데이터 없음');
-//       ScaffoldMessenger.of(context).showSnackBar(
-//         const SnackBar(content: Text('심박수 데이터를 가져올 수 없습니다')),
-//       );
-//       return;
-//     }
-//     // if (steps == 0) {
-//     //   print('⚠️ 걸음수 데이터 누락');
-//     //   ScaffoldMessenger.of(context).showSnackBar(
-//     //     const SnackBar(content: Text('걸음수 데이터를 가져오지 못했습니다')),
-//     //   );
-//     //   return;
-//     // }
-
-//     // ✅ 걸음수는 총합으로 정확하게 가져오기 (오늘 하루 기준)
-//     // final startUTC = todayStart.toUtc();
-//     // final endUTC = now.toUtc();    
-//     final steps = await health.getTotalStepsInInterval(
-//       todayStart,
-//       nowKTC,
-//     );
-//     print(todayStart);
-//     print(nowKTC);
-
-//     // ✅ 위치 정보
-//     Position position = await Geolocator.getCurrentPosition(
-//       desiredAccuracy: LocationAccuracy.bestForNavigation,
-//     );
-//     String address = await getAddressFromCoordinates(position).catchError((e) {
-//       print('❌ 주소 변환 실패: $e');
-//       return '주소 변환 오류';
-//     });
-
-//     Map<String, dynamic> location = {
-//       'address': address,
-//       'lat': position.latitude,
-//       'lng': position.longitude,
-//     };
-
-//     // ✅ Firestore 저장
-//     await FirebaseFirestore.instance
-//         .collection('users')
-//         .doc(uid)
-//         .collection('healthData')
-//         .add({
-//       'heartRate': heartRate,
-//       'steps': steps,
-//       'location': location,
-//       'timestamp': Timestamp.now(),
-//     });
-
-//     print('✅ 건강 데이터 저장 완료: HR $heartRate, Steps $steps');
-
-//     // ✅ 심박수 경고 푸시 알림
-//     if ((heartRate > 100 || heartRate < 50) && groupId != null) {
-//       final groupDoc = await FirebaseFirestore.instance
-//           .collection('groups')
-//           .doc(groupId)
-//           .get();
-//       final guardianId = groupDoc['ownerId'];
-//       final groupName = groupDoc['name'];
-//       final guardianDoc = await FirebaseFirestore.instance
-//           .collection('users')
-//           .doc(guardianId)
-//           .get();
-//       final fcmToken = guardianDoc['fcmToken'];
-
-//       await sendPushNotification(
-//         fcmToken: fcmToken,
-//         title: '🚨 [$groupName] ${user.email}님 심박수 경고',
-//         body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
-//         guardianId: guardianId,
-//         senderEmail: user.email!,
-//         groupName: groupName,
-//       );
-//     }
-//   } catch (e, stackTrace) {
-//     print('''
-// ⚠️ 치명적 오류 발생
-// Error: $e
-// Stack Trace: $stackTrace
-// ''');
-//     ScaffoldMessenger.of(context).showSnackBar(
-//       const SnackBar(content: Text('건강 데이터 처리 중 오류가 발생했습니다')),
-//     );
-//   }
-// }
 
   Future<void> saveAbnormalHData() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -412,16 +237,14 @@ void openHealthConnectSettings() {
 
     if (role != 'user') return;
 
-    // 테스트용 비정상 심박수 생성
     final random = Random();
     int heartRate;
     if (random.nextBool()) {
-      heartRate = random.nextInt(40) + 30; // 30~69 (저심박)
+      heartRate = random.nextInt(40) + 30;
     } else {
-      heartRate = random.nextInt(40) + 110; // 110~149 (고심박)
+      heartRate = random.nextInt(40) + 110;
     }
-
-    final steps = random.nextInt(2000) + 1000; // 예시 걸음수
+    final steps = random.nextInt(2000) + 1000;
 
     try {
       final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.bestForNavigation);
@@ -436,11 +259,7 @@ void openHealthConnectSettings() {
         'lng': position.longitude,
       };
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('healthData')
-          .add({
+      await FirebaseFirestore.instance.collection('users').doc(uid).collection('healthData').add({
         'heartRate': heartRate,
         'steps': steps,
         'location': location,
@@ -465,7 +284,6 @@ void openHealthConnectSettings() {
           groupName: groupName,
         );
       }
-
     } catch (e) {
       print('❌ saveAbnormalHData 실패: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -489,7 +307,7 @@ void openHealthConnectSettings() {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              stopBackgroundService(); // 백그라운드 서비스 중지
+              FlutterBackgroundService().invoke("stopService");
               await FirebaseAuth.instance.signOut();
               if (!context.mounted) return;
               Navigator.pushReplacement(
@@ -500,6 +318,7 @@ void openHealthConnectSettings() {
           )
         ],
       ),
+      // 🔽 아래 body는 그대로 유지 (너무 길어 생략함)
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('users').doc(user!.uid).get(),
         builder: (context, snapshot) {

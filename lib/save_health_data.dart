@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geocoding/geocoding.dart';
@@ -230,3 +232,85 @@ Stack Trace: $stackTrace
 ''');
   }
 }
+
+Future<void> saveAbnormalHDataBackground() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
+
+  final uid = user.uid;
+  final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+  final role = doc['role'];
+  final groupId = doc.data()?['groupId'];
+
+  if (role != 'user') return;
+
+  final random = Random();
+  int heartRate = random.nextBool() ? random.nextInt(40) + 30 : random.nextInt(40) + 101;
+  int steps = random.nextInt(2000) + 1000;
+
+  try {
+    // 🔵 위치 가져오기
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.bestForNavigation,
+    );
+
+    // 🔵 주소 변환
+    String address = '주소 변환 오류';
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+        localeIdentifier: "ko",
+      );
+      if (placemarks.isNotEmpty) {
+        final placemark = placemarks.first;
+        address = '${placemark.administrativeArea} ${placemark.locality} ${placemark.subLocality}'.trim();
+      }
+    } catch (e) {
+      print('❌ 주소 변환 실패: $e');
+    }
+
+    Map<String, dynamic> location = {
+      'address': address,
+      'lat': position.latitude,
+      'lng': position.longitude,
+    };
+
+    // 🔴 비정상 데이터 저장
+    await FirebaseFirestore.instance.collection('users').doc(uid).collection('healthData').add({
+      'heartRate': heartRate,
+      'steps': steps,
+      'location': location, // 추가됨
+      'timestamp': Timestamp.now(),
+    });
+
+    print('✅ [백그라운드] 테스트용 비정상 심박수 저장 완료: HR $heartRate, Steps $steps');
+
+    // 🔴 푸시 알림
+    if ((heartRate > 100 || heartRate < 50) && groupId != null) {
+      final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
+      final guardianId = groupDoc['ownerId'];
+      final groupName = groupDoc['name'];
+      final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
+      final fcmToken = guardianDoc['fcmToken'];
+
+      await sendPushNotification(
+        fcmToken: fcmToken,
+        title: '🚨 [$groupName] ${user.email}님 심박수 경고',
+        body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
+        guardianId: guardianId,
+        senderEmail: user.email!,
+        groupName: groupName,
+      );
+    }
+  } catch (e, stackTrace) {
+    print('''
+⚠️ [백그라운드] saveAbnormalHDataBackground 오류 발생
+Error: $e
+Stack Trace: $stackTrace
+''');
+  }
+}
+
+
+
