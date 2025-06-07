@@ -66,7 +66,7 @@ Future<void> onStart(ServiceInstance service) async {
 
     if (user != null) {
     debugPrint("✅ [백그라운드] 시연용 데이터 저장 중...");
-    await saveAbnormalHDataBackground();
+    await saveRealHDataBackground();
     } else {
       debugPrint("⛔ [백그라운드] 로그인 안됨");
       return;
