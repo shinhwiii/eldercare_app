@@ -20,7 +20,6 @@ import 'login_screen.dart';
 import 'group_page.dart';
 import 'alert_inbox_page.dart';
 
-
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 class HomeScreen extends StatefulWidget {
@@ -62,7 +61,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-
   Future<void> requestNotificationPermission() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
 
@@ -88,6 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final isAvailable = await health.isHealthConnectAvailable();
     if (!isAvailable) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Health Connect 앱이 설치되어 있지 않습니다.')),
       );
@@ -97,6 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     bool hasPermissions = (await health.hasPermissions(types, permissions: permissions)) ?? false;
     if (hasPermissions) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('이미 건강 데이터 권한이 허용되어 있습니다.')),
       );
@@ -106,11 +106,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
     bool granted = await health.requestAuthorization(types, permissions: permissions);
     if (granted) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('✅ 건강 데이터 권한이 허용되었습니다.')),
       );
       print('✅ 권한 허용됨');
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('❌ 건강 데이터 권한이 거부되었습니다.'),
@@ -174,6 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _requestLocationPermission() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('📍 위치 서비스가 꺼져 있어요. 설정에서 켜 주세요.')),
       );
@@ -184,6 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('⚠️ 위치 권한이 거부되었어요.')),
         );
@@ -192,6 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (permission == LocationPermission.deniedForever) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('🚫 위치 권한이 영구적으로 거부되었어요. 설정에서 허용해 주세요.')),
       );
@@ -292,9 +297,9 @@ class _HomeScreenState extends State<HomeScreen> {
           abnormalUserId: uid,
         );
       }
-
     } catch (e) {
       print('❌ saveAbnormalHData 실패: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('건강 데이터 저장 중 오류가 발생했습니다')),
       );
@@ -327,7 +332,6 @@ class _HomeScreenState extends State<HomeScreen> {
           )
         ],
       ),
-      // 🔽 아래 body는 그대로 유지 (너무 길어 생략함)
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('users').doc(user!.uid).get(),
         builder: (context, snapshot) {
@@ -414,7 +418,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 24),
                         StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('users').doc(user!.uid).collection('healthData').orderBy('timestamp', descending: true).limit(1).snapshots(),
+                          stream: FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user!.uid)
+                              .collection('healthData')
+                              .orderBy('timestamp', descending: true)
+                              .limit(1)
+                              .snapshots(),
                           builder: (context, snapshot) {
                             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                               return Column(
@@ -445,9 +455,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Text('🧡 심박수: ${data['heartRate']} bpm'),
                                 Text('👟 걸음수: ${data['steps']} 보'),
                                 Text(
-                                    '📍 위치: ${(data['location'] is Map && data['location'].containsKey('address'))
-                                        ? data['location']['address']
-                                        : data['location'].toString()}'),
+                                  '📍 위치: ${(data['location'] is Map && data['location'].containsKey('address')) ? data['location']['address'] : data['location'].toString()}',
+                                ),
                                 Text('🕒 시간: ${data['timestamp'].toDate()}'),
                                 const SizedBox(height: 8),
                                 ElevatedButton(
