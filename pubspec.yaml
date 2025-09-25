@@ -45,6 +45,9 @@ dependencies:
   # 낙상 감지
   sensors_plus: ^5.0.0
 
+  # 전화
+  url_launcher: ^6.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

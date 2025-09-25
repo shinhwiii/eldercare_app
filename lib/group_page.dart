@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';              // ✅ 전화/문자 실행
+import 'package:android_intent_plus/android_intent.dart';    // ✅ Android 폴백
+import 'dart:io' show Platform;
 
 import 'group_detail_page.dart';
 
@@ -69,7 +72,7 @@ class _GroupPageState extends State<GroupPage> {
     );
   }
 
-  // ✅ 문서에서 표시용 이름 계산: name → email prefix → '알 수 없음'
+  // ✅ 표시용 이름
   String _displayNameFromUserDoc(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final name = (data['name'] as String?)?.trim();
@@ -81,6 +84,86 @@ class _GroupPageState extends State<GroupPage> {
       if (prefix.isNotEmpty) return prefix;
     }
     return '알 수 없음';
+  }
+
+  // ✅ 전화번호 정규화
+  String _normalizePhone(String input) {
+    final digitsOnly = input.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitsOnly.isEmpty) return digitsOnly;
+    if (digitsOnly.startsWith('0')) return digitsOnly;
+    if (digitsOnly.startsWith('82')) {
+      final rest = digitsOnly.substring(2);
+      return '0$rest';
+    }
+    return digitsOnly;
+  }
+
+  // 📞 그룹 보호자 전화걸기
+  Future<void> _callGuardian() async {
+    if (currentGroupId == null) return;
+
+    try {
+      final groupSnap = await FirebaseFirestore.instance.collection('groups').doc(currentGroupId).get();
+      if (!groupSnap.exists) return;
+
+      final guardianId = groupSnap['ownerId'];
+      final guardianSnap = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
+      if (!guardianSnap.exists) return;
+
+      final phone = (guardianSnap.data()?['phone'] as String?)?.trim();
+      if (phone == null || phone.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('보호자 전화번호가 등록되어 있지 않습니다.')));
+        return;
+      }
+
+      final normalized = _normalizePhone(phone);
+      final uri = Uri(scheme: 'tel', path: normalized);
+
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && Platform.isAndroid) {
+        final intent = AndroidIntent(
+          action: 'android.intent.action.DIAL',
+          data: 'tel:$normalized',
+        );
+        await intent.launch();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('전화 연결 중 오류가 발생했습니다: $e')));
+    }
+  }
+
+  // 📩 그룹 보호자 문자보내기 (기본 문구 없음)
+  Future<void> _smsGuardian() async {
+    if (currentGroupId == null) return;
+
+    try {
+      final groupSnap = await FirebaseFirestore.instance.collection('groups').doc(currentGroupId).get();
+      if (!groupSnap.exists) return;
+
+      final guardianId = groupSnap['ownerId'];
+      final guardianSnap = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
+      if (!guardianSnap.exists) return;
+
+      final phone = (guardianSnap.data()?['phone'] as String?)?.trim();
+      if (phone == null || phone.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('보호자 전화번호가 등록되어 있지 않습니다.')));
+        return;
+      }
+
+      final normalized = _normalizePhone(phone);
+      final uri = Uri(scheme: 'sms', path: normalized);
+
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && Platform.isAndroid) {
+        final intent = AndroidIntent(
+          action: 'android.intent.action.SENDTO',
+          data: 'smsto:$normalized',
+        );
+        await intent.launch();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('문자 연결 중 오류가 발생했습니다: $e')));
+    }
   }
 
   @override
@@ -168,8 +251,29 @@ class _GroupPageState extends State<GroupPage> {
               children: [
                 const SizedBox(height: 16),
                 Text('👥 가입된 그룹: $groupName', style: const TextStyle(fontSize: 18)),
-                const SizedBox(height: 16),
-                // ✅ 이메일 아이콘/문구 → 이름 기준으로 수정
+                const SizedBox(height: 8),
+
+                // ✅ 사용자 입장: 보호자에게 전화/문자 아이콘
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      onPressed: _callGuardian,
+                      icon: const Icon(Icons.call, color: Colors.green),
+                      iconSize: 28,
+                      tooltip: '보호자에게 전화',
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _smsGuardian,
+                      icon: const Icon(Icons.message, color: Colors.blue),
+                      iconSize: 28,
+                      tooltip: '보호자에게 문자',
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
                 const Text('👤 그룹 사용자 목록:', style: TextStyle(fontSize: 16)),
                 const SizedBox(height: 10),
                 Expanded(
@@ -210,7 +314,6 @@ class _GroupPageState extends State<GroupPage> {
                               }
                               return ListTile(
                                 leading: const Icon(Icons.person),
-                                // ✅ 이메일 대신 이름으로 표시
                                 title: Text(displayName),
                                 subtitle: Text(subtitle),
                               );
