@@ -5,23 +5,37 @@ Future<void> sendPushNotification({
   required String title,
   required String body,
   required String guardianId,
-  required String senderEmail,
+  required String senderEmail,     // ✅ 기존 호환 유지
+  String? senderName,              // ✅ 새로 추가: 이름 우선 사용
   required String groupName,
-  required String abnormalUserId, // ✅ 비정상 사용자 ID 추가
+  required String abnormalUserId,  // 비정상 사용자 ID
 }) async {
-  // 🔔 푸시 알림 전송용 → Cloud Function에서 이 컬렉션 감지함
+  // ✅ 표시용 발신자: senderName → (없으면) senderEmail 앞부분 → '회원'
+  String displaySender;
+  if (senderName != null && senderName.trim().isNotEmpty) {
+    displaySender = senderName.trim();
+  } else if (senderEmail.trim().isNotEmpty) {
+    displaySender = senderEmail.split('@').first;
+  } else {
+    displaySender = '회원';
+  }
+
+  // 🔔 Cloud Function 트리거용 컬렉션
   await FirebaseFirestore.instance.collection('notifications').add({
     'fcmToken': fcmToken,
     'title': title,
     'body': body,
     'guardianId': guardianId,
-    'senderEmail': senderEmail,
     'groupName': groupName,
     'timestamp': FieldValue.serverTimestamp(),
-    'userId': abnormalUserId, // ✅ 여기도 저장 (추가적으로 필요할 수 있음)
+    'userId': abnormalUserId,
+
+    // ✅ 표시 관련 필드
+    'senderName': displaySender,     // ← 알림에 보여줄 이름
+    'senderEmail': senderEmail,      // ← 호환용(기존 로직 사용 시)
   });
 
-  // 📥 수신함 표시용 → 알림 수신함에서 읽는 위치
+  // 📥 보호자 수신함(앱에서 보여줄 데이터)
   await FirebaseFirestore.instance
       .collection('users')
       .doc(guardianId)
@@ -29,11 +43,14 @@ Future<void> sendPushNotification({
       .add({
     'title': title,
     'body': body,
-    'senderEmail': senderEmail,
     'groupName': groupName,
     'timestamp': FieldValue.serverTimestamp(),
     'userId': abnormalUserId,
+
+    // ✅ 표시 관련 필드
+    'senderName': displaySender,     // ← 여기만 읽어도 이름으로 표시 가능
+    'senderEmail': senderEmail,      // ← 필요 시 레거시 표시에 사용
   });
 
-  print('✅ 알림 Firestore 및 수신함에 저장 완료 (보호자 ID: $guardianId)');
+  print('✅ 알림 저장 완료 (보호자 ID: $guardianId, 보낸이: $displaySender)');
 }

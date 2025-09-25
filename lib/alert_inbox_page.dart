@@ -66,7 +66,13 @@ class AlertInboxPage extends StatelessWidget {
               final alert = alerts[index].data() as Map<String, dynamic>;
               final title = alert['title'] ?? '제목 없음';
               final body = alert['body'] ?? '내용 없음';
-              final senderEmail = alert['senderEmail'] ?? '알 수 없음';
+              final senderName = alert['senderName']; // ✅ 이름 필드
+              final senderEmail = alert['senderEmail'];
+              final senderDisplay =
+              (senderName != null && senderName.toString().trim().isNotEmpty)
+                  ? senderName
+                  : (senderEmail ?? '알 수 없음');
+
               final timestamp = alert['timestamp']?.toDate();
               final abnormalUserId = alert['userId']; // ✅ 알림 속 사용자 ID 가져오기
 
@@ -77,9 +83,10 @@ class AlertInboxPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(body),
-                    Text('보낸 사람: $senderEmail'),
+                    Text('보낸 사람: $senderDisplay'), // ✅ 이름 우선 표시
                     if (timestamp != null)
-                      Text('🕒 ${timestamp.toString()}', style: const TextStyle(fontSize: 12)),
+                      Text('🕒 ${timestamp.toString()}',
+                          style: const TextStyle(fontSize: 12)),
                   ],
                 ),
                 onTap: abnormalUserId != null
@@ -88,13 +95,15 @@ class AlertInboxPage extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => UserHealthAnalysisPage(userId: abnormalUserId),
+                      builder: (_) =>
+                          UserHealthAnalysisPage(userId: abnormalUserId),
                     ),
                   );
                 }
                     : () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('❗ 이 알림에는 사용자 ID 정보가 없습니다.')),
+                    const SnackBar(
+                        content: Text('❗ 이 알림에는 사용자 ID 정보가 없습니다.')),
                   );
                 },
               );

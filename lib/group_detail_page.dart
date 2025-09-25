@@ -21,6 +21,20 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
   final currentUser = FirebaseAuth.instance.currentUser;
   final TextEditingController inviteController = TextEditingController();
 
+  // ✅ 표시용 이름 계산: name → email prefix → '알 수 없음'
+  String _displayNameFromUserDoc(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final name = (data['name'] as String?)?.trim();
+    if (name != null && name.isNotEmpty) return name;
+
+    final email = (data['email'] as String?)?.trim();
+    if (email != null && email.isNotEmpty) {
+      final prefix = email.split('@').first;
+      if (prefix.isNotEmpty) return prefix;
+    }
+    return '알 수 없음';
+  }
+
   Future<void> inviteUserByEmail(String email) async {
     final userQuery = await FirebaseFirestore.instance
         .collection('users')
@@ -117,7 +131,9 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
             itemBuilder: (context, index) {
               final userDoc = users[index];
               final uid = userDoc.id;
-              final email = userDoc['email'];
+
+              // ✅ 이름 우선 표시(이름 없으면 이메일 앞부분)
+              final displayName = _displayNameFromUserDoc(userDoc);
 
               return FutureBuilder<QuerySnapshot>(
                 future: FirebaseFirestore.instance
@@ -128,10 +144,30 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                     .limit(1)
                     .get(),
                 builder: (context, healthSnapshot) {
-                  if (!healthSnapshot.hasData || healthSnapshot.data!.docs.isEmpty) {
+                  // 기본 서브타이틀
+                  String subtitle = '건강 데이터 없음';
+
+                  if (healthSnapshot.hasData && healthSnapshot.data!.docs.isNotEmpty) {
+                    final data = healthSnapshot.data!.docs.first.data() as Map<String, dynamic>;
+                    final timestamp = data['timestamp'];
+                    final timeStr = timestamp != null ? timestamp.toDate().toString() : '알 수 없음';
+
+                    final location = data['location'];
+                    final locationText = (location is Map && location.containsKey('address'))
+                        ? location['address']
+                        : location.toString();
+
                     return ListTile(
-                      title: Text(email),
-                      subtitle: const Text('건강 데이터 없음'),
+                      leading: const Icon(Icons.person),
+                      title: Text(displayName), // ✅ 이메일 → 이름
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('💓 ${data['heartRate']}bpm 👟 ${data['steps']}보'),
+                          Text('📍 $locationText'),
+                          Text('🕒 최근 갱신: $timeStr'),
+                        ],
+                      ),
                       trailing: IconButton(
                         icon: const Icon(Icons.person_remove, color: Colors.red),
                         onPressed: () => removeUserFromGroup(uid),
@@ -148,25 +184,11 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                     );
                   }
 
-                  final data = healthSnapshot.data!.docs.first.data() as Map<String, dynamic>;
-                  final timestamp = data['timestamp'];
-                  final timeStr = timestamp != null ? timestamp.toDate().toString() : '알 수 없음';
-
-                  final location = data['location'];
-                  final locationText = (location is Map && location.containsKey('address'))
-                      ? location['address']
-                      : location.toString();
-
+                  // 건강 데이터 없을 때 타일
                   return ListTile(
-                    title: Text(email),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('💓 ${data['heartRate']}bpm 👟 ${data['steps']}보'),
-                        Text('📍 $locationText'),
-                        Text('🕒 최근 갱신: $timeStr'),
-                      ],
-                    ),
+                    leading: const Icon(Icons.person),
+                    title: Text(displayName), // ✅ 이메일 → 이름
+                    subtitle: Text(subtitle),
                     trailing: IconButton(
                       icon: const Icon(Icons.person_remove, color: Colors.red),
                       onPressed: () => removeUserFromGroup(uid),

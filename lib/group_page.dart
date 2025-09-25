@@ -69,6 +69,20 @@ class _GroupPageState extends State<GroupPage> {
     );
   }
 
+  // ✅ 문서에서 표시용 이름 계산: name → email prefix → '알 수 없음'
+  String _displayNameFromUserDoc(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final name = (data['name'] as String?)?.trim();
+    if (name != null && name.isNotEmpty) return name;
+
+    final email = (data['email'] as String?)?.trim();
+    if (email != null && email.isNotEmpty) {
+      final prefix = email.split('@').first;
+      if (prefix.isNotEmpty) return prefix;
+    }
+    return '알 수 없음';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (role.isEmpty) {
@@ -155,7 +169,8 @@ class _GroupPageState extends State<GroupPage> {
                 const SizedBox(height: 16),
                 Text('👥 가입된 그룹: $groupName', style: const TextStyle(fontSize: 18)),
                 const SizedBox(height: 16),
-                const Text('📧 그룹 사용자 목록:', style: TextStyle(fontSize: 16)),
+                // ✅ 이메일 아이콘/문구 → 이름 기준으로 수정
+                const Text('👤 그룹 사용자 목록:', style: TextStyle(fontSize: 16)),
                 const SizedBox(height: 10),
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
@@ -175,8 +190,8 @@ class _GroupPageState extends State<GroupPage> {
                         itemCount: users.length,
                         itemBuilder: (context, index) {
                           final userDoc = users[index];
-                          final email = userDoc['email'];
                           final uid = userDoc.id;
+                          final displayName = _displayNameFromUserDoc(userDoc);
 
                           return FutureBuilder<QuerySnapshot>(
                             future: FirebaseFirestore.instance
@@ -195,7 +210,8 @@ class _GroupPageState extends State<GroupPage> {
                               }
                               return ListTile(
                                 leading: const Icon(Icons.person),
-                                title: Text(email),
+                                // ✅ 이메일 대신 이름으로 표시
+                                title: Text(displayName),
                                 subtitle: Text(subtitle),
                               );
                             },

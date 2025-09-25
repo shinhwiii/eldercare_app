@@ -11,6 +11,23 @@ import 'send_push_notification.dart';
 
 typedef AddressResolver = Future<String> Function(Position position);
 
+/// 표시용 이름: users/{uid}.name → (없으면) 이메일 앞부분 → '회원'
+Future<String> _resolveDisplayName({required String uid, String? fallbackEmail}) async {
+  try {
+    final snap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final data = snap.data() ?? {};
+    final name = (data['name'] as String?)?.trim();
+    if (name != null && name.isNotEmpty) return name;
+
+    final email = (data['email'] as String?)?.trim();
+    if (email != null && email.isNotEmpty) return email.split('@').first;
+  } catch (_) {}
+  if (fallbackEmail != null && fallbackEmail.isNotEmpty) {
+    return fallbackEmail.split('@').first;
+  }
+  return '회원';
+}
+
 Future<void> saveRealHData({
   required BuildContext context,
   required AddressResolver getAddressFromCoordinates,
@@ -93,18 +110,23 @@ Future<void> saveRealHData({
           .get();
       final guardianId = groupDoc['ownerId'];
       final groupName = groupDoc['name'];
+
       final guardianDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(guardianId)
           .get();
       final fcmToken = guardianDoc['fcmToken'];
 
+      // ✅ 이름으로 표시
+      final displayName = await _resolveDisplayName(uid: uid, fallbackEmail: user.email);
+
       await sendPushNotification(
         fcmToken: fcmToken,
-        title: '🚨 [$groupName] ${user.email}님 심박수 경고',
+        title: '🚨 [$groupName] $displayName님 심박수 경고',
         body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
         guardianId: guardianId,
-        senderEmail: user.email!,
+        senderEmail: user.email ?? '',   // 호환용 저장
+        senderName: displayName,         // ✅ 수신함에도 이름으로
         groupName: groupName,
         abnormalUserId: uid,
       );
@@ -210,18 +232,23 @@ Future<void> saveRealHDataBackground() async {
           .get();
       final guardianId = groupDoc['ownerId'];
       final groupName = groupDoc['name'];
+
       final guardianDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(guardianId)
           .get();
       final fcmToken = guardianDoc['fcmToken'];
 
+      // ✅ 이름으로 표시
+      final displayName = await _resolveDisplayName(uid: uid, fallbackEmail: user.email);
+
       await sendPushNotification(
         fcmToken: fcmToken,
-        title: '🚨 [$groupName] ${user.email}님 심박수 경고',
+        title: '🚨 [$groupName] $displayName님 심박수 경고',
         body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
         guardianId: guardianId,
-        senderEmail: user.email!,
+        senderEmail: user.email ?? '',
+        senderName: displayName,        // ✅
         groupName: groupName,
         abnormalUserId: uid,
       );
@@ -282,7 +309,7 @@ Future<void> saveAbnormalHDataBackground() async {
     await FirebaseFirestore.instance.collection('users').doc(uid).collection('healthData').add({
       'heartRate': heartRate,
       'steps': steps,
-      'location': location, // 추가됨
+      'location': location,
       'timestamp': Timestamp.now(),
     });
 
@@ -293,15 +320,20 @@ Future<void> saveAbnormalHDataBackground() async {
       final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
       final guardianId = groupDoc['ownerId'];
       final groupName = groupDoc['name'];
+
       final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
       final fcmToken = guardianDoc['fcmToken'];
 
+      // ✅ 이름으로 표시
+      final displayName = await _resolveDisplayName(uid: uid, fallbackEmail: user.email);
+
       await sendPushNotification(
         fcmToken: fcmToken,
-        title: '🚨 [$groupName] ${user.email}님 심박수 경고',
+        title: '🚨 [$groupName] $displayName님 심박수 경고',
         body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
         guardianId: guardianId,
-        senderEmail: user.email!,
+        senderEmail: user.email ?? '',
+        senderName: displayName,        // ✅
         groupName: groupName,
         abnormalUserId: uid,
       );
@@ -317,8 +349,6 @@ Stack Trace: $stackTrace
 
 /// =========================
 /// ✅ 낙상 감지 시: 심박/걸음/위치 수집→저장→푸시 (백그라운드용)
-///     * 평소엔 낙상만 감시하다가, 낙상 확정 순간에만 호출해서 수집/저장/알림 처리.
-///     * 수집 로직과 저장 구조는 saveRealHDataBackground와 동일.
 /// =========================
 Future<void> saveFallDataBackground() async {
   final user = FirebaseAuth.instance.currentUser;
@@ -338,7 +368,7 @@ Future<void> saveFallDataBackground() async {
   final todayStart = DateTime(nowKTC.year, nowKTC.month, nowKTC.day);
 
   try {
-    // ▶ 심박수 (saveRealHDataBackground와 동일 구간/방식)
+    // ▶ 심박수
     final heartData = await health.getHealthDataFromTypes(
       startTime: startTime,
       endTime: now,
@@ -353,13 +383,13 @@ Future<void> saveFallDataBackground() async {
       }
     }
 
-    // ▶ 걸음수 (동일: 오늘 00시(KST) ~ 지금)
+    // ▶ 걸음수
     final steps = await health.getTotalStepsInInterval(
       todayStart,
       nowKTC,
     );
 
-    // ▶ 위치 + 주소 (동일)
+    // ▶ 위치 + 주소
     Position position = await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.bestForNavigation,
     );
@@ -385,7 +415,7 @@ Future<void> saveFallDataBackground() async {
       'lng': position.longitude,
     };
 
-    // ▶ Firestore 저장 (구조 동일 + fallDetected: true)
+    // ▶ Firestore 저장
     await FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -400,21 +430,26 @@ Future<void> saveFallDataBackground() async {
 
     print('✅ [백그라운드][낙상] 저장 완료: HR $heartRate, Steps $steps');
 
-    // ▶ 보호자 푸시 (심박 포함 문구, HR 없으면 생략)
+    // ▶ 보호자 푸시
     if (groupId != null) {
       final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
       final guardianId = groupDoc['ownerId'];
       final groupName = groupDoc['name'];
+
       final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
       final fcmToken = guardianDoc['fcmToken'];
 
+      // ✅ 이름으로 표시
+      final displayName = await _resolveDisplayName(uid: uid, fallbackEmail: user.email);
       final hrText = (heartRate != null) ? ' 심박수: ${heartRate}bpm' : '';
+
       await sendPushNotification(
         fcmToken: fcmToken,
-        title: '🚨 [$groupName] ${user.email}님 낙상 감지',
+        title: '🆘 [$groupName] $displayName님 낙상 감지',
         body: '낙상이 감지되었습니다.$hrText',
         guardianId: guardianId,
         senderEmail: user.email ?? '',
+        senderName: displayName,      // ✅
         groupName: groupName,
         abnormalUserId: uid,
       );
@@ -478,12 +513,16 @@ Future<void> sendFallAlertBackground() async {
       return;
     }
 
+    // ✅ 이름으로 표시
+    final displayName = await _resolveDisplayName(uid: uid, fallbackEmail: user.email);
+
     await sendPushNotification(
       fcmToken: fcmToken,
-      title: '🚨 [$groupName] ${user.email ?? '사용자'} 낙상 감지',
+      title: '🆘 [$groupName] $displayName님 낙상 감지',
       body: '낙상이 감지되었습니다. 즉시 안전 확인이 필요합니다.',
       guardianId: guardianId,
       senderEmail: user.email ?? '',
+      senderName: displayName,    // ✅
       groupName: groupName,
       abnormalUserId: uid,
     );

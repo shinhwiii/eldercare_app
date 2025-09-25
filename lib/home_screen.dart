@@ -234,39 +234,80 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> saveAbnormalHData() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final uid = user.uid;
-    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-    final role = doc['role'];
-    final groupId = doc.data()?['groupId'];
-
-    if (role != 'user') return;
-
-    // 테스트용 비정상 심박수 생성
-    final random = Random();
-    int heartRate;
-    if (random.nextBool()) {
-      heartRate = random.nextInt(40) + 30; // 30~69 (저심박)
-    } else {
-      heartRate = random.nextInt(40) + 100; // 100~149 (고심박)
+    if (user == null) {
+      print('⛔ [TEST] user == null');
+      return;
     }
 
-    final steps = random.nextInt(2000) + 1000; // 예시 걸음수
+    final uid = user.uid;
+    print('🔎 [TEST] uid=$uid, email=${user.email}');
 
     try {
-      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.bestForNavigation);
-      final address = await getAddressFromCoordinates(position).catchError((e) {
-        print('❌ 주소 변환 실패: $e');
-        return '주소 변환 오류';
-      });
+      // 1) 사용자 문서/역할/그룹
+      final snap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (!snap.exists) {
+        print('⛔ [TEST] users/$uid 문서 없음');
+        return;
+      }
+      final data = snap.data()!;
+      final role = data['role'];
+      final groupId = data['groupId'];
+      print('🔎 [TEST] role=$role, groupId=$groupId');
+
+      if (role != 'user') {
+        print('ℹ️ [TEST] role!=user → 중단');
+        return;
+      }
+      if (groupId == null) {
+        print('⛔ [TEST] groupId 없음(그룹 미가입)');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('그룹에 가입되어 있지 않습니다. 먼저 그룹에 가입해 주세요.')),
+          );
+        }
+        return;
+      }
+
+      // 2) 표시용 이름: name → 이메일 앞부분 → '회원'
+      String displayName;
+      final name = (data['name'] as String?)?.trim();
+      if (name != null && name.isNotEmpty) {
+        displayName = name;
+      } else if ((user.email ?? '').isNotEmpty) {
+        displayName = user.email!.split('@').first;
+      } else {
+        displayName = '회원';
+      }
+      print('🔎 [TEST] displayName=$displayName');
+
+      // 3) 테스트용 비정상 심박/걸음 생성
+      final random = Random();
+      final int heartRate = random.nextBool() ? (random.nextInt(40) + 30) : (random.nextInt(40) + 100); // 30~69 or 100~149
+      final steps = random.nextInt(2000) + 1000;
+      print('🔎 [TEST] HR=$heartRate, steps=$steps');
+
+      // 4) 위치 + 주소(실패 허용)
+      String address = '주소 변환 오류';
+      double? lat, lng;
+      try {
+        final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.bestForNavigation);
+        lat = position.latitude;
+        lng = position.longitude;
+        address = await getAddressFromCoordinates(position).catchError((e) {
+          print('❌ [TEST] 주소 변환 실패: $e');
+          return '주소 변환 오류';
+        });
+      } catch (e) {
+        print('⚠️ [TEST] 위치 가져오기 실패: $e');
+      }
 
       final location = {
         'address': address,
-        'lat': position.latitude,
-        'lng': position.longitude,
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
       };
 
+      // 5) 데이터 저장
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -276,35 +317,76 @@ class _HomeScreenState extends State<HomeScreen> {
         'steps': steps,
         'location': location,
         'timestamp': Timestamp.now(),
+        'source': 'TEST_BUTTON',
       });
+      print('✅ [TEST] 비정상 데이터 저장 완료');
 
-      print('✅ 테스트용 비정상 심박수 저장 완료: HR $heartRate, Steps $steps');
-
-      if ((heartRate > 100 || heartRate < 50) && groupId != null) {
-        final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
-        final guardianId = groupDoc['ownerId'];
-        final groupName = groupDoc['name'];
-        final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
-        final fcmToken = guardianDoc['fcmToken'];
-
-        await sendPushNotification(
-          fcmToken: fcmToken,
-          title: '🚨 [$groupName] ${user.email}님 심박수 경고',
-          body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
-          guardianId: guardianId,
-          senderEmail: user.email!,
-          groupName: groupName,
-          abnormalUserId: uid,
-        );
+      // 6) 기준 충족 여부 확인
+      final isAbnormal = (heartRate > 100 || heartRate < 50);
+      print('🔎 [TEST] isAbnormal=$isAbnormal');
+      if (!isAbnormal) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('정상 값으로 생성되어 알림 미전송 (HR=$heartRate)')),
+          );
+        }
+        return;
       }
-    } catch (e) {
-      print('❌ saveAbnormalHData 실패: $e');
+
+      // 7) 그룹/보호자/토큰
+      final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
+      if (!groupDoc.exists) {
+        print('⛔ [TEST] groups/$groupId 문서 없음');
+        return;
+      }
+      final guardianId = groupDoc['ownerId'];
+      final groupName = groupDoc['name'];
+      print('🔎 [TEST] guardianId=$guardianId, groupName=$groupName');
+
+      final guardianDoc = await FirebaseFirestore.instance.collection('users').doc(guardianId).get();
+      if (!guardianDoc.exists) {
+        print('⛔ [TEST] guardian users/$guardianId 문서 없음');
+        return;
+      }
+      final fcmToken = (guardianDoc['fcmToken'] as String?) ?? '';
+      print('🔎 [TEST] guardian fcmToken length=${fcmToken.length}');
+      if (fcmToken.isEmpty) {
+        print('⛔ [TEST] 보호자 FCM 토큰 비어 있음');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('보호자 기기의 알림 토큰이 없습니다. 보호자 앱에서 로그인해 주세요.')),
+          );
+        }
+        return;
+      }
+
+      // 8) 푸시 전송(이름 기반 + 수신함 이름 표시)
+      await sendPushNotification(
+        fcmToken: fcmToken,
+        title: '🚨 [$groupName] $displayName님 심박수 경고',
+        body: '심박수가 ${heartRate}bpm으로 비정상입니다!',
+        guardianId: guardianId,
+        senderEmail: user.email ?? '',
+        senderName: displayName, // ✅ 수신함에도 이름으로 저장됨
+        groupName: groupName,
+        abnormalUserId: uid,
+      );
+
+      print('✅ [TEST] sendPushNotification 호출 완료');
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('건강 데이터 저장 중 오류가 발생했습니다')),
+        const SnackBar(content: Text('비정상 테스트: 알림 전송 시도 완료 (로그 확인)')),
+      );
+    } catch (e) {
+      print('❌ [TEST] saveAbnormalHData 실패: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('건강 데이터 저장/알림 처리 중 오류가 발생했습니다')),
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -340,6 +422,13 @@ class _HomeScreenState extends State<HomeScreen> {
           final userData = snapshot.data!.data() as Map<String, dynamic>?;
           final role = userData?['role'] ?? 'user';
 
+          // ✅ 이름/표시명 계산: 사용자일 때 name 사용, 없으면 '회원'
+          final name = (userData?['name'] as String?)?.trim();
+          final displayName = (name != null && name.isNotEmpty) ? name : '회원';
+
+          // ✅ 초대 목록은 이미 불러온 userData 재사용
+          final List<dynamic> invites = (userData?['groupInvites'] ?? []) as List<dynamic>;
+
           return Center(
             child: SingleChildScrollView(
               child: Column(
@@ -349,7 +438,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (role == 'guardian')
                     Column(
                       children: [
-                        Text('안녕하세요, ${user!.email}님!', style: const TextStyle(fontSize: 18)),
+                        // ✅ 보호자: 이메일 표시 없이 간단 인삿말
+                        const Text('안녕하세요 👋 오늘도 활기차게!', style: TextStyle(fontSize: 18)),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: () {
@@ -376,47 +466,43 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (role == 'user')
                     Column(
                       children: [
-                        Text('안녕하세요, ${user!.email}님!', style: const TextStyle(fontSize: 18)),
+                        // ✅ 사용자: 이름 포함 간단 인삿말
+                        Text('안녕하세요, $displayName님', style: const TextStyle(fontSize: 18)),
                         const SizedBox(height: 16),
-                        FutureBuilder<DocumentSnapshot>(
-                          future: FirebaseFirestore.instance.collection('users').doc(user!.uid).get(),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) return const CircularProgressIndicator();
 
-                            final data = snapshot.data!.data() as Map<String, dynamic>;
-                            final List<dynamic> invites = data['groupInvites'] ?? [];
+                        // ✅ 초대 목록 (userData 재사용)
+                        if (invites.isNotEmpty)
+                          Column(
+                            children: [
+                              const Text('📨 초대된 그룹 목록', style: TextStyle(fontSize: 18)),
+                              const SizedBox(height: 10),
+                              ...invites.map((groupId) => ListTile(
+                                title: Text('그룹 ID: $groupId'),
+                                trailing: ElevatedButton(
+                                  onPressed: () async {
+                                    await FirebaseFirestore.instance
+                                        .collection('users')
+                                        .doc(user!.uid)
+                                        .update({
+                                      'groupId': groupId,
+                                      'groupInvites': FieldValue.arrayRemove([groupId]),
+                                    });
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('그룹 가입 완료!')),
+                                      );
+                                      setState(() {}); // 화면 새로고침
+                                    }
+                                  },
+                                  child: const Text('수락'),
+                                ),
+                              )),
+                            ],
+                          ),
 
-                            if (invites.isEmpty) {
-                              return const SizedBox.shrink();
-                            }
-
-                            return Column(
-                              children: [
-                                const Text('📨 초대된 그룹 목록', style: TextStyle(fontSize: 18)),
-                                const SizedBox(height: 10),
-                                ...invites.map((groupId) => ListTile(
-                                  title: Text('그룹 ID: $groupId'),
-                                  trailing: ElevatedButton(
-                                    onPressed: () async {
-                                      await FirebaseFirestore.instance.collection('users').doc(user!.uid).update({
-                                        'groupId': groupId,
-                                        'groupInvites': FieldValue.arrayRemove([groupId]),
-                                      });
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('그룹 가입 완료!')),
-                                        );
-                                        setState(() {});
-                                      }
-                                    },
-                                    child: const Text('수락'),
-                                  ),
-                                )),
-                              ],
-                            );
-                          },
-                        ),
                         const SizedBox(height: 24),
+
+                        // 건강 데이터 섹션
                         StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
                               .collection('users')
@@ -475,6 +561,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           },
                         ),
+
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: () {
