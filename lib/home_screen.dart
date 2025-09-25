@@ -439,7 +439,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Column(
                       children: [
                         // ✅ 보호자: 이메일 표시 없이 간단 인삿말
-                        const Text('안녕하세요 👋 오늘도 활기차게!', style: TextStyle(fontSize: 18)),
+                        const Text('안녕하세요 👋', style: TextStyle(fontSize: 18)),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: () {
@@ -467,7 +467,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Column(
                       children: [
                         // ✅ 사용자: 이름 포함 간단 인삿말
-                        Text('안녕하세요, $displayName님', style: const TextStyle(fontSize: 18)),
+                        Text('안녕하세요, $displayName님! 👋', style: const TextStyle(fontSize: 18)),
                         const SizedBox(height: 16),
 
                         // ✅ 초대 목록 (userData 재사용)
