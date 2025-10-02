@@ -48,9 +48,7 @@ class _UserHealthAnalysisPageState extends State<UserHealthAnalysisPage> {
     return filtered;
   }
 
-  bool isHeartRateAbnormal(int heartRate) {
-    return heartRate <= 50 || heartRate >= 100;
-  }
+  bool isHeartRateAbnormal(int heartRate) => heartRate <= 50 || heartRate >= 100;
 
   // ✅ 전화번호 정규화
   String _normalizePhone(String input) {
@@ -145,6 +143,15 @@ class _UserHealthAnalysisPageState extends State<UserHealthAnalysisPage> {
     }
   }
 
+  String _fmtTs(dynamic ts) {
+    if (ts is Timestamp) {
+      final d = ts.toDate();
+      return DateFormat('yyyy-MM-dd HH:mm').format(d);
+    }
+    if (ts is DateTime) return DateFormat('yyyy-MM-dd HH:mm').format(ts);
+    return '알 수 없음';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -160,10 +167,7 @@ class _UserHealthAnalysisPageState extends State<UserHealthAnalysisPage> {
                 ),
               );
             },
-            child: const Text(
-              '건강 분석 요약',
-              style: TextStyle(color: Colors.black),
-            ),
+            child: const Text('건강 분석 요약'),
           ),
         ],
       ),
@@ -179,96 +183,312 @@ class _UserHealthAnalysisPageState extends State<UserHealthAnalysisPage> {
             return const Center(child: Text('최근 30일 동안 건강 데이터가 없습니다.'));
           }
 
+          // 최신 데이터(헤더 카드 요약용)
+          final latest = dataList.first;
+          final latestHr = latest['heartRate'] as int;
+          final latestSteps = latest['steps'] as int;
+          final latestAddr = (latest['location'] is Map && latest['location'].containsKey('address'))
+              ? latest['location']['address'].toString()
+              : latest['location'].toString();
+          final latestWhen = _fmtTs(latest['timestamp']);
+
           return Column(
             children: [
-              Expanded(
-                child: ListView.builder(
-                  itemCount: dataList.length,
-                  itemBuilder: (context, index) {
-                    final data = dataList[index];
-                    final timestamp = (data['timestamp'] as Timestamp).toDate();
-                    final timeStr = DateFormat('yyyy-MM-dd HH:mm').format(timestamp);
-                    final heartRate = data['heartRate'] as int;
-
-                    return ListTile(
-                      title: Text(timeStr),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              // ===== 상단 요약 카드 =====
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: _SectionCard(
+                  title: '사용자 최근 상태',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
                         children: [
-                          Text('💓 $heartRate bpm 👟 ${data['steps']} 보'),
-                          Text(
-                            '📍 ${(data['location'] is Map && data['location'].containsKey('address'))
-                                ? data['location']['address']
-                                : data['location'].toString()}',
+                          Expanded(
+                            child: _StatPill(
+                              icon: Icons.favorite_outline,
+                              label: '심박수',
+                              value: '$latestHr bpm',
+                              danger: isHeartRateAbnormal(latestHr),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _StatPill(
+                              icon: Icons.directions_walk_outlined,
+                              label: '걸음수',
+                              value: '$latestSteps 보',
+                            ),
                           ),
                         ],
                       ),
-                      trailing: isHeartRateAbnormal(heartRate)
-                          ? const Icon(Icons.warning, color: Colors.red)
-                          : null,
+                      const SizedBox(height: 8),
+                      Text('📍 $latestAddr', maxLines: 2, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 4),
+                      Text('🕒 $latestWhen', style: const TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 12),
+                      // ===== 아이콘만 있는 액션 버튼들 =====
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                final loc = latest['location'];
+                                if (loc is Map && loc.containsKey('lat') && loc.containsKey('lng')) {
+                                  final lat = (loc['lat'] as num).toDouble();
+                                  final lng = (loc['lng'] as num).toDouble();
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => UserLocationMapPage(lat: lat, lng: lng),
+                                    ),
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('📍 위치 정보가 없습니다.')),
+                                  );
+                                }
+                              },
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Icon(Icons.location_on_outlined),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _callUser,
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Icon(Icons.call, color: Colors.green),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _smsUser,
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Icon(Icons.message, color: Colors.blue),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ===== 리스트 =====
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  itemCount: dataList.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final data = dataList[index];
+                    final timeStr = _fmtTs(data['timestamp']);
+                    final heartRate = data['heartRate'] as int;
+                    final steps = data['steps'] as int;
+                    final address = (data['location'] is Map && data['location'].containsKey('address'))
+                        ? data['location']['address'].toString()
+                        : data['location'].toString();
+
+                    final abnormal = isHeartRateAbnormal(heartRate);
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: abnormal ? Colors.red.withOpacity(0.03) : Colors.white,
+                        border: Border.all(color: abnormal ? Colors.red.shade200 : Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  timeStr,
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                                ),
+                              ),
+                              if (abnormal)
+                                const _Badge(text: '이상 징후', icon: Icons.warning_amber_rounded),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _SmallStat(
+                                  icon: Icons.favorite_outline,
+                                  label: '심박수',
+                                  value: '$heartRate bpm',
+                                  danger: abnormal,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _SmallStat(
+                                  icon: Icons.directions_walk_outlined,
+                                  label: '걸음수',
+                                  value: '$steps 보',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text('📍 $address', maxLines: 2, overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
                     );
                   },
                 ),
               ),
-              const SizedBox(height: 12),
-
-              // ✅ 버튼들: 위치 보기 + 전화 걸기 + 문자 보내기
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // 위치 버튼 (기존 유지)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        final latest = dataList.first;
-                        final loc = latest['location'];
-                        if (loc is Map && loc.containsKey('lat') && loc.containsKey('lng')) {
-                          final lat = (loc['lat'] as num).toDouble();
-                          final lng = (loc['lng'] as num).toDouble();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => UserLocationMapPage(lat: lat, lng: lng),
-                            ),
-                          );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('📍 위치 정보가 없습니다.')),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.location_on),
-                      label: const Text('사용자 실시간 위치 보기'),
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    // 전화 버튼 (아이콘만)
-                    IconButton(
-                      onPressed: _callUser,
-                      icon: const Icon(Icons.call, color: Colors.green),
-                      iconSize: 32,
-                      tooltip: '전화',
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    // 문자 버튼 (아이콘만)
-                    IconButton(
-                      onPressed: _smsUser,
-                      icon: const Icon(Icons.message, color: Colors.blue),
-                      iconSize: 32,
-                      tooltip: '문자',
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+// ===== 재사용 위젯 =====
+
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final Widget child;
+  const _SectionCard({required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool danger;
+  const _StatPill({required this.icon, required this.label, required this.value, this.danger = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = danger ? Colors.red.shade300 : Colors.grey.shade300;
+    final bg = danger ? Colors.red.withOpacity(0.04) : Colors.grey[50];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: danger ? Colors.red : null),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: danger ? Colors.red : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SmallStat extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool danger;
+  const _SmallStat({required this.icon, required this.label, required this.value, this.danger = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? Colors.red : Colors.black87;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: danger ? Colors.red.withOpacity(0.04) : Colors.grey[50],
+        border: Border.all(color: danger ? Colors.red.shade200 : Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$label  •  $value',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  const _Badge({required this.text, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.red.withOpacity(0.08),
+        border: Border.all(color: Colors.red.shade300),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.red),
+          const SizedBox(width: 6),
+          Text(text, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+        ],
       ),
     );
   }
