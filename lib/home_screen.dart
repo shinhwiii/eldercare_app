@@ -20,6 +20,7 @@ import 'login_screen.dart';
 import 'group_page.dart';
 import 'alert_inbox_page.dart';
 import 'group_detail_page.dart'; // ✅ 그룹 상세 페이지로 이동
+import 'user_health_analysis_page.dart'; // ✅ 사용자 건강 요약 페이지로 이동
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -637,9 +638,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     // ===== 사용자 홈 =====
                     if (role == 'user') ...[
-                      // 건강 데이터 섹션
+                      // 건강 데이터 섹션 (제목 옆 화살표 → 건강 요약 페이지)
                       _SectionCard(
                         title: '건강 데이터',
+                        onTitleTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => UserHealthAnalysisPage(
+                                userId: user!.uid,
+                                readOnly: true, // ✅ 사용자: 전화/문자/위치 버튼 숨김
+                              ),
+                            ),
+                          );
+                        },
                         child: StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
                               .collection('users')
@@ -746,9 +758,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       const SizedBox(height: 12),
 
-                      // 초대 목록: 항상 하단
-                      // (중략)
-// 초대 목록: 초대가 있을 때만 노출
+                      // 초대 목록: 초대가 있을 때만 노출
                       if (invites.isNotEmpty) ...[
                         const SizedBox(height: 12),
                         _SectionCard(
@@ -805,10 +815,33 @@ class _HomeScreenState extends State<HomeScreen> {
 class _SectionCard extends StatelessWidget {
   final String title;
   final Widget child;
-  const _SectionCard({required this.title, required this.child});
+  final VoidCallback? onTitleTap; // ✅ 제목 탭 동작
+
+  const _SectionCard({
+    required this.title,
+    required this.child,
+    this.onTitleTap,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final titleRow = Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+        if (onTitleTap != null)
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: '자세히 보기',
+            onPressed: onTitleTap,
+          ),
+      ],
+    );
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -817,10 +850,9 @@ class _SectionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
+            onTitleTap != null
+                ? InkWell(onTap: onTitleTap, borderRadius: BorderRadius.circular(8), child: titleRow)
+                : titleRow,
             const SizedBox(height: 12),
             child,
           ],

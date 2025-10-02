@@ -10,8 +10,13 @@ import 'user_location_map_page.dart';
 
 class UserHealthAnalysisPage extends StatefulWidget {
   final String userId;
+  final bool readOnly; // ✅ 추가: 사용자 모드에서 버튼 숨김
 
-  const UserHealthAnalysisPage({super.key, required this.userId});
+  const UserHealthAnalysisPage({
+    super.key,
+    required this.userId,
+    this.readOnly = false, // 기본은 보호자 모드
+  });
 
   @override
   State<UserHealthAnalysisPage> createState() => _UserHealthAnalysisPageState();
@@ -227,59 +232,61 @@ class _UserHealthAnalysisPageState extends State<UserHealthAnalysisPage> {
                       const SizedBox(height: 4),
                       Text('🕒 $latestWhen', style: const TextStyle(color: Colors.grey)),
                       const SizedBox(height: 12),
-                      // ===== 아이콘만 있는 액션 버튼들 =====
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () {
-                                final loc = latest['location'];
-                                if (loc is Map && loc.containsKey('lat') && loc.containsKey('lng')) {
-                                  final lat = (loc['lat'] as num).toDouble();
-                                  final lng = (loc['lng'] as num).toDouble();
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => UserLocationMapPage(lat: lat, lng: lng),
-                                    ),
-                                  );
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('📍 위치 정보가 없습니다.')),
-                                  );
-                                }
-                              },
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(0, 48),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+
+                      // ===== 액션 버튼: readOnly=false 일 때만 노출 =====
+                      if (!widget.readOnly)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  final loc = latest['location'];
+                                  if (loc is Map && loc.containsKey('lat') && loc.containsKey('lng')) {
+                                    final lat = (loc['lat'] as num).toDouble();
+                                    final lng = (loc['lng'] as num).toDouble();
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => UserLocationMapPage(lat: lat, lng: lng),
+                                      ),
+                                    );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('📍 위치 정보가 없습니다.')),
+                                    );
+                                  }
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: const Icon(Icons.location_on_outlined),
                               ),
-                              child: const Icon(Icons.location_on_outlined),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: _callUser,
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(0, 48),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _callUser,
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: const Icon(Icons.call, color: Colors.green),
                               ),
-                              child: const Icon(Icons.call, color: Colors.green),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: _smsUser,
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(0, 48),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _smsUser,
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: const Icon(Icons.message, color: Colors.blue),
                               ),
-                              child: const Icon(Icons.message, color: Colors.blue),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                     ],
                   ),
                 ),
