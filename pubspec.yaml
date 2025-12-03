@@ -9,13 +9,44 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  
+  # Background tasks
+  flutter_background_service: ^5.1.0
 
-  # Firebase Core & Auth (버전 명확히 고정)
-  firebase_core: 2.25.4
-  firebase_auth: 4.12.0
+  # Firebase
+  cloud_firestore: ^5.6.7
+  firebase_core: ^3.13.0
+  firebase_auth: ^5.5.3
+  firebase_messaging: ^15.2.5
 
-  # 로그인 UI 등 기본 위젯용
+  # 로컬 알림
+  flutter_local_notifications: ^19.2.1
+
+  # 위치 추적
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
+
+  # UI
   cupertino_icons: ^1.0.8
+
+  # Health
+  health: ^12.2.0
+  android_intent_plus: ^5.3.0
+
+  # 그래프
+  fl_chart: ^0.66.2
+
+  # ✅ 지도 표시 (구글 지도)
+  google_maps_flutter: ^2.5.0
+
+  # ✅ 알림 권한 요청용 패키지 추가
+  permission_handler: ^11.0.0
+
+  # 낙상 감지
+  sensors_plus: ^5.0.0
+
+  # 전화
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:

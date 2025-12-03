@@ -4,6 +4,11 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+
+	<!-- ✅ 위치 권한 요청 추가 -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>건강 데이터를 저장할 때 위치 정보가 필요합니다.</string>
+
 	<key>CFBundleDisplayName</key>
 	<string>Eldercare App</string>
 	<key>CFBundleExecutable</key>

@@ -4,6 +4,13 @@ allprojects {
         mavenCentral()
     }
 }
+// 기존 AGP 버전 변경
+plugins {
+    id("com.android.application") version "8.9.1" apply false
+    id("com.android.library") version "8.9.1" apply false
+    // ...
+}
+
 
 val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()
 rootProject.layout.buildDirectory.value(newBuildDir)
